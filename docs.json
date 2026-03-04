@@ -114,6 +114,7 @@
               "api/application/nodes",
               "api/application/locations",
               "api/application/servers",
+              "api/application/databases",
               "api/application/nests",
               "api/application/eggs"
             ]

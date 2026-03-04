@@ -1,0 +1,299 @@
+---
+title: Server Databases
+description: Manage MySQL databases for game servers via Application API
+---
+
+The Server Databases API allows administrators to create and manage MySQL databases for individual game servers. Each server can have multiple databases up to its configured limit.
+
+## List Server Databases
+
+<CodeGroup>
+```bash cURL
+curl "https://panel.example.com/api/application/servers/{server_id}/databases" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Retrieves all databases for a specific server.
+
+### Path Parameters
+
+<ParamField path="server_id" type="integer" required>
+  The internal ID of the server
+</ParamField>
+
+### Response
+
+<ResponseExample>
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "server_database",
+      "attributes": {
+        "id": 5,
+        "server": 2,
+        "host": 3,
+        "database": "s2_minecraft",
+        "username": "u2_QsIAw4lh",
+        "remote": "%",
+        "max_connections": 0,
+        "created_at": "2024-01-15T10:30:00+00:00",
+        "updated_at": "2024-01-15T10:30:00+00:00"
+      }
+    }
+  ]
+}
+```
+</ResponseExample>
+
+<ResponseField name="object" type="string">
+  Always `list`
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of database objects
+  
+  <Expandable title="Database Object">
+    <ResponseField name="id" type="integer">
+      Database unique identifier
+    </ResponseField>
+    
+    <ResponseField name="server" type="integer">
+      Server ID this database belongs to
+    </ResponseField>
+    
+    <ResponseField name="host" type="integer">
+      Database host ID
+    </ResponseField>
+    
+    <ResponseField name="database" type="string">
+      Database name (format: `s{server_id}_{name}`)
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      Database username (format: `u{server_id}_{random}`)
+    </ResponseField>
+    
+    <ResponseField name="remote" type="string">
+      Remote connection string (typically `%` for all IPs)
+    </ResponseField>
+    
+    <ResponseField name="max_connections" type="integer">
+      Maximum concurrent connections (0 = unlimited)
+    </ResponseField>
+    
+    <ResponseField name="created_at" type="string">
+      Database creation timestamp
+    </ResponseField>
+    
+    <ResponseField name="updated_at" type="string">
+      Last update timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Get Database Details
+
+<CodeGroup>
+```bash cURL
+curl "https://panel.example.com/api/application/servers/{server_id}/databases/{database_id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Retrieves details for a specific database.
+
+### Path Parameters
+
+<ParamField path="server_id" type="integer" required>
+  The internal ID of the server
+</ParamField>
+
+<ParamField path="database_id" type="integer" required>
+  The internal ID of the database
+</ParamField>
+
+### Response
+
+Returns a single database object with the same structure as shown in the list endpoint.
+
+## Create Database
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://panel.example.com/api/application/servers/{server_id}/databases" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "database": "minecraft",
+    "remote": "%",
+    "host": 1
+  }'
+```
+</CodeGroup>
+
+Creates a new database for the server.
+
+### Path Parameters
+
+<ParamField path="server_id" type="integer" required>
+  The internal ID of the server
+</ParamField>
+
+### Request Body
+
+<ParamField body="database" type="string" required>
+  Database name (will be prefixed with `s{server_id}_`). Max 48 characters, alphanumeric and underscores only.
+</ParamField>
+
+<ParamField body="remote" type="string" required>
+  Remote connection string. Use `%` to allow connections from any IP, or specify specific IPs/CIDR ranges.
+</ParamField>
+
+<ParamField body="host" type="integer" required>
+  Database host ID to create the database on
+</ParamField>
+
+### Response
+
+<ResponseExample>
+```json
+{
+  "object": "server_database",
+  "attributes": {
+    "id": 6,
+    "server": 2,
+    "host": 1,
+    "database": "s2_minecraft",
+    "username": "u2_a8Qw9kLp",
+    "remote": "%",
+    "max_connections": 0,
+    "created_at": "2024-01-15T11:00:00+00:00",
+    "updated_at": "2024-01-15T11:00:00+00:00"
+  },
+  "meta": {
+    "resource": "https://panel.example.com/api/application/servers/2/databases/6"
+  }
+}
+```
+</ResponseExample>
+
+Returns the created database object. The password is auto-generated and shown only in the response meta (not in subsequent requests).
+
+<Warning>
+The database password is only returned once during creation. Store it securely as it cannot be retrieved later, only reset.
+</Warning>
+
+## Reset Database Password
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://panel.example.com/api/application/servers/{server_id}/databases/{database_id}/reset-password" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Resets the password for a database. Returns a 204 No Content response on success.
+
+### Path Parameters
+
+<ParamField path="server_id" type="integer" required>
+  The internal ID of the server
+</ParamField>
+
+<ParamField path="database_id" type="integer" required>
+  The internal ID of the database
+</ParamField>
+
+### Response
+
+Returns HTTP 204 (No Content) on success. The new password is generated automatically and must be retrieved from the Panel UI or via the Client API.
+
+<Note>
+After resetting a password, the server owner should retrieve the new password from the Panel UI at `/server/{identifier}/databases`.
+</Note>
+
+## Delete Database
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE "https://panel.example.com/api/application/servers/{server_id}/databases/{database_id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Permanently deletes a database and all its data.
+
+### Path Parameters
+
+<ParamField path="server_id" type="integer" required>
+  The internal ID of the server
+</ParamField>
+
+<ParamField path="database_id" type="integer" required>
+  The internal ID of the database
+</ParamField>
+
+### Response
+
+Returns HTTP 204 (No Content) on successful deletion.
+
+<Warning>
+This action is irreversible. All data in the database will be permanently deleted. Ensure you have backups before deleting.
+</Warning>
+
+## Database Limits
+
+Servers have a `database_limit` field that restricts how many databases can be created:
+
+- Set to `0` for unlimited databases
+- Set to a positive integer for a specific limit
+- Attempts to create databases beyond the limit will return a 400 error
+
+Check the server's `database_limit` field via the [Servers API](/api/application/servers) before creating databases.
+
+## Connection Information
+
+To connect to a database from the game server:
+
+```yaml Connection Details
+Host: {database_host.host}:{database_host.port}
+Database: s{server_id}_{name}
+Username: u{server_id}_{random}
+Password: (auto-generated, see Panel UI)
+```
+
+The actual host and port are determined by the database host configuration. Retrieve these via the Panel admin interface or by checking the database host settings.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use meaningful database names">
+    Name databases according to their purpose (e.g., `minecraft`, `plugins`, `stats`) rather than generic names.
+  </Accordion>
+  
+  <Accordion title="Restrict remote access when possible">
+    Instead of `%`, use specific IP addresses or CIDR ranges for the `remote` field to improve security.
+  </Accordion>
+  
+  <Accordion title="Monitor database limits">
+    Check server database limits before attempting to create new databases to avoid errors.
+  </Accordion>
+  
+  <Accordion title="Coordinate password resets">
+    When resetting passwords via the Application API, notify server owners to retrieve the new password from the Panel UI.
+  </Accordion>
+</AccordionGroup>
+
+## Related Endpoints
+
+- [Client API - Databases](/api/client/databases) - End-user database management
+- [Servers](/api/application/servers) - Server management including database limits
+- [Database Hosts](/admin/database-hosts) - Configuring MySQL database hosts
