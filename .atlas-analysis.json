@@ -1,0 +1,174 @@
+{
+  "projectType": "saas",
+  "projectName": "Pterodactyl Panel",
+  "projectDescription": "A free, open-source game server management panel built with PHP, React, and Go that runs game servers in isolated Docker containers.",
+  "theme": "aspen",
+  "primaryColor": "#9a5c2b",
+  "lightColor": "#b8aca4",
+  "darkColor": "#f4f1ea",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "features",
+              "system-requirements",
+              "installation"
+            ]
+          },
+          {
+            "group": "Panel Administration",
+            "pages": [
+              "admin/overview",
+              "admin/users",
+              "admin/servers",
+              "admin/nodes",
+              "admin/locations",
+              "admin/nests-eggs",
+              "admin/mounts",
+              "admin/database-hosts"
+            ]
+          },
+          {
+            "group": "Server Management",
+            "pages": [
+              "servers/overview",
+              "servers/console",
+              "servers/file-manager",
+              "servers/databases",
+              "servers/schedules",
+              "servers/backups",
+              "servers/network",
+              "servers/startup-parameters",
+              "servers/settings"
+            ]
+          },
+          {
+            "group": "User Guide",
+            "pages": [
+              "user/account-settings",
+              "user/two-factor-auth",
+              "user/api-keys",
+              "user/ssh-keys",
+              "user/subusers"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "config/environment",
+              "config/email",
+              "config/database",
+              "config/cache-queue",
+              "config/security"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/docker-configuration",
+              "advanced/egg-creation",
+              "advanced/migrations",
+              "advanced/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview",
+              "api/authentication",
+              "api/rate-limiting",
+              "api/errors"
+            ]
+          },
+          {
+            "group": "Application API",
+            "pages": [
+              "api/application/users",
+              "api/application/nodes",
+              "api/application/locations",
+              "api/application/servers",
+              "api/application/nests",
+              "api/application/eggs"
+            ]
+          },
+          {
+            "group": "Client API",
+            "pages": [
+              "api/client/account",
+              "api/client/servers",
+              "api/client/files",
+              "api/client/databases",
+              "api/client/schedules",
+              "api/client/backups",
+              "api/client/network",
+              "api/client/startup"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Wings",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "wings/overview",
+              "wings/installation",
+              "wings/configuration"
+            ]
+          },
+          {
+            "group": "Operations",
+            "pages": [
+              "wings/docker-management",
+              "wings/networking",
+              "wings/security",
+              "wings/monitoring"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Game server management with Docker isolation",
+    "Web-based console and file manager",
+    "User and permission management with subusers",
+    "Automated backups and schedules",
+    "Multiple node support with load balancing",
+    "RESTful API for automation",
+    "Database management per server",
+    "Dynamic resource allocation",
+    "Two-factor authentication",
+    "Activity logging and audit trails"
+  ],
+  "publicApiSurface": [
+    "GET /api/application/users",
+    "GET /api/application/servers",
+    "GET /api/application/nodes",
+    "GET /api/application/locations",
+    "POST /api/application/servers",
+    "GET /api/client",
+    "GET /api/client/servers/{server}",
+    "POST /api/client/servers/{server}/command",
+    "POST /api/client/servers/{server}/power",
+    "GET /api/client/servers/{server}/files/list",
+    "POST /api/client/servers/{server}/files/write",
+    "GET /api/client/servers/{server}/databases",
+    "POST /api/client/servers/{server}/schedules",
+    "POST /api/client/servers/{server}/backups",
+    "GET /api/client/account",
+    "PUT /api/client/account/email",
+    "PUT /api/client/account/password"
+  ]
+}
