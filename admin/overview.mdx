@@ -1,0 +1,147 @@
+---
+title: Admin Panel Overview
+description: Introduction to the Pterodactyl Panel administration area
+---
+
+The Pterodactyl Panel administration area provides comprehensive tools for managing your entire game server hosting platform. As an administrator, you have full control over users, servers, nodes, and system configuration.
+
+## Accessing the Admin Panel
+
+Administrators can access the admin panel by:
+
+1. Logging in with an account that has `root_admin` permissions
+2. Clicking on the admin menu in the top navigation bar
+3. Navigating directly to `/admin` on your Panel installation
+
+<Note>
+Only users with the `root_admin` flag set to `true` can access the admin panel. This is stored in the `users` table.
+</Note>
+
+## Admin Dashboard
+
+The admin dashboard provides an overview of your entire Pterodactyl installation:
+
+- **System Statistics**: Total servers, users, nodes, and resource allocation
+- **Recent Activity**: Latest server creations and user registrations
+- **Node Status**: Health and resource usage across all nodes
+- **Version Information**: Current Panel and Wings versions
+
+## Key Admin Sections
+
+<CardGroup cols={2}>
+  <Card title="Users" icon="users" href="/admin/users">
+    Manage user accounts, permissions, and access levels
+  </Card>
+  
+  <Card title="Servers" icon="server" href="/admin/servers">
+    Create, configure, and manage game servers
+  </Card>
+  
+  <Card title="Nodes" icon="cube" href="/admin/nodes">
+    Add and configure physical/virtual nodes
+  </Card>
+  
+  <Card title="Locations" icon="map-marker-alt" href="/admin/locations">
+    Organize nodes by geographic location
+  </Card>
+  
+  <Card title="Nests & Eggs" icon="egg" href="/admin/nests-eggs">
+    Configure game types and server configurations
+  </Card>
+  
+  <Card title="Mounts" icon="folder-open" href="/admin/mounts">
+    Manage shared directories across servers
+  </Card>
+  
+  <Card title="Database Hosts" icon="database" href="/admin/database-hosts">
+    Configure MySQL/MariaDB database servers
+  </Card>
+  
+  <Card title="Settings" icon="cog">
+    System-wide configuration and settings
+  </Card>
+</CardGroup>
+
+## User Levels
+
+Pterodactyl has two user levels defined in the `User` model:
+
+- **Regular User** (`USER_LEVEL_USER = 0`): Standard user with access to their servers
+- **Administrator** (`USER_LEVEL_ADMIN = 1`): Full administrative access
+
+```php
+public const USER_LEVEL_USER = 0;
+public const USER_LEVEL_ADMIN = 1;
+```
+
+## Common Admin Tasks
+
+### Setting Up a New Installation
+
+<Steps>
+  <Step title="Create a Location">
+    Locations help organize your nodes geographically
+  </Step>
+  
+  <Step title="Add a Node">
+    Configure at least one node to host servers
+  </Step>
+  
+  <Step title="Configure Allocations">
+    Assign IP addresses and ports to the node
+  </Step>
+  
+  <Step title="Import Nests & Eggs">
+    Install game configuration templates
+  </Step>
+  
+  <Step title="Create Users">
+    Add user accounts for server owners
+  </Step>
+  
+  <Step title="Deploy Servers">
+    Create servers for users on your nodes
+  </Step>
+</Steps>
+
+## Administrative Permissions
+
+The admin panel operates with a simple permission model:
+
+- **Root Admin**: Full access to all admin functions
+- **Regular User**: No admin panel access
+
+<Warning>
+There is no granular permission system for administrators. Any user with `root_admin = true` has complete control over the Panel.
+</Warning>
+
+## Best Practices
+
+1. **Limit Admin Access**: Only grant `root_admin` to trusted individuals
+2. **Use 2FA**: Enable two-factor authentication for all admin accounts
+3. **Regular Backups**: Maintain backups of your Panel database
+4. **Monitor Activity**: Review the activity log regularly for unauthorized changes
+5. **Update Regularly**: Keep Panel and Wings updated to the latest versions
+
+## Activity Logging
+
+All administrative actions are logged to the `activity_log` table, including:
+
+- User creation and modification
+- Server deployment and configuration changes
+- Node updates
+- Settings modifications
+
+You can review activity logs to track changes and troubleshoot issues.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="User Management" icon="users" href="/admin/users">
+    Learn how to create and manage user accounts
+  </Card>
+  
+  <Card title="Node Setup" icon="cube" href="/admin/nodes">
+    Configure your first node for hosting servers
+  </Card>
+</CardGroup>

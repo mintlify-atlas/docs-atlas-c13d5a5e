@@ -1,0 +1,464 @@
+---
+title: Database Management
+description: Creating and managing MySQL/MariaDB databases for your server
+---
+
+Pterodactyl allows you to create and manage MySQL/MariaDB databases directly from the panel. Each server can have multiple databases depending on the configured limit.
+
+## Creating a Database
+
+Create a new database for your server:
+
+```bash Create Database
+POST /api/client/servers/{server}/databases
+Content-Type: application/json
+
+{
+  "database": "minecraft",
+  "remote": "%"
+}
+```
+
+```json Response
+{
+  "object": "server_database",
+  "attributes": {
+    "id": "s1_minecraft",
+    "name": "s1_minecraft",
+    "username": "u1_xK9pL2mQ",
+    "remote": "%",
+    "max_connections": 0,
+    "created_at": "2025-01-15T10:30:00+00:00",
+    "relationships": {
+      "password": {
+        "object": "database_password",
+        "attributes": {
+          "password": "aB3$kL9mP2qR5vX8"
+        }
+      }
+    }
+  }
+}
+```
+
+<Steps>
+  <Step title="Navigate to Databases">
+    Go to your server's Databases tab in the panel.
+  </Step>
+  
+  <Step title="Enter Database Name">
+    Provide a name for your database (e.g., "minecraft", "stats", "economy").
+  </Step>
+  
+  <Step title="Set Remote Access">
+    Configure the remote connection host:
+    - `%` - Allow connections from anywhere
+    - `192.168.1.%` - Allow from specific subnet
+    - `localhost` - Local connections only
+  </Step>
+  
+  <Step title="Create Database">
+    Click Create. The database, user, and password are generated automatically.
+  </Step>
+</Steps>
+
+### Database Naming
+
+Database names are automatically prefixed with your server identifier:
+
+- You specify: `minecraft`
+- Actual database: `s1_minecraft`
+- Username: `u1_xK9pL2mQ` (random)
+
+This prevents conflicts between servers on shared database hosts.
+
+## Listing Databases
+
+View all databases for a server:
+
+```bash List Databases
+GET /api/client/servers/{server}/databases
+```
+
+```json Response
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "server_database",
+      "attributes": {
+        "id": "s1_minecraft",
+        "name": "s1_minecraft",
+        "username": "u1_xK9pL2mQ",
+        "remote": "%",
+        "max_connections": 0,
+        "host": {
+          "address": "mysql.example.com",
+          "port": 3306
+        },
+        "created_at": "2025-01-15T10:30:00+00:00"
+      }
+    }
+  ]
+}
+```
+
+<Note>
+The password is not included in list responses for security. It's only returned when creating a database or rotating the password.
+</Note>
+
+## Database Connection Details
+
+Use these details to connect from your game server:
+
+```yaml Example Plugin Config
+database:
+  host: mysql.example.com
+  port: 3306
+  database: s1_minecraft
+  username: u1_xK9pL2mQ
+  password: aB3$kL9mP2qR5vX8
+```
+
+### JDBC Connection String
+
+For Java applications:
+
+```
+jdbc:mysql://mysql.example.com:3306/s1_minecraft?user=u1_xK9pL2mQ&password=aB3$kL9mP2qR5vX8
+```
+
+### PHP PDO
+
+```php
+$pdo = new PDO(
+    'mysql:host=mysql.example.com;port=3306;dbname=s1_minecraft',
+    'u1_xK9pL2mQ',
+    'aB3$kL9mP2qR5vX8'
+);
+```
+
+## Rotating Passwords
+
+Change the database password for security:
+
+```bash Rotate Password
+POST /api/client/servers/{server}/databases/{database}/rotate-password
+```
+
+```json Response
+{
+  "object": "server_database",
+  "attributes": {
+    "id": "s1_minecraft",
+    "name": "s1_minecraft",
+    "username": "u1_xK9pL2mQ",
+    "relationships": {
+      "password": {
+        "object": "database_password",
+        "attributes": {
+          "password": "nE7$wQ4tY2pL9vB3"
+        }
+      }
+    }
+  }
+}
+```
+
+<Warning>
+Rotating the password immediately invalidates the old password. Update your server configuration before rotating to avoid downtime.
+</Warning>
+
+<Steps>
+  <Step title="Prepare New Configuration">
+    Have your config file ready to update with the new password.
+  </Step>
+  
+  <Step title="Rotate Password">
+    Click the "Rotate Password" button in the panel or use the API.
+  </Step>
+  
+  <Step title="Copy New Password">
+    The new password is displayed once. Copy it immediately.
+  </Step>
+  
+  <Step title="Update Configuration">
+    Update your server's database configuration with the new password and restart the server.
+  </Step>
+</Steps>
+
+## Deleting a Database
+
+Remove a database permanently:
+
+```bash Delete Database
+DELETE /api/client/servers/{server}/databases/{database}
+```
+
+```json Success
+HTTP/1.1 204 No Content
+```
+
+<Warning>
+Deleting a database permanently removes all data and cannot be undone. Ensure you have backups before deleting.
+</Warning>
+
+## Database Limits
+
+Servers have a maximum number of databases they can create:
+
+```bash Check Limit
+GET /api/client/servers/{server}
+```
+
+```json Response
+{
+  "attributes": {
+    "feature_limits": {
+      "databases": 5
+    },
+    "relationships": {
+      "databases": {
+        "data": [
+          // Current databases (2 out of 5)
+        ]
+      }
+    }
+  }
+}
+```
+
+If you try to create more databases than allowed:
+
+```json Error Response
+HTTP/1.1 400 Bad Request
+
+{
+  "errors": [
+    {
+      "code": "TooManyDatabasesException",
+      "status": "400",
+      "detail": "This server has reached its database limit."
+    }
+  ]
+}
+```
+
+<Note>
+Contact your server administrator to increase the database limit if needed.
+</Note>
+
+## Remote Access Configuration
+
+The `remote` field controls which hosts can connect:
+
+### Allow All (Default)
+
+```json
+{
+  "remote": "%"
+}
+```
+
+Permits connections from any IP address. Use this for most applications.
+
+### Specific IP
+
+```json
+{
+  "remote": "192.168.1.100"
+}
+```
+
+Only allows connections from `192.168.1.100`.
+
+### IP Range/Subnet
+
+```json
+{
+  "remote": "10.0.%.%"
+}
+```
+
+Allows entire `10.0.0.0/16` subnet.
+
+### Localhost Only
+
+```json
+{
+  "remote": "localhost"
+}
+```
+
+Restricts connections to the local server only.
+
+<Note>
+Some database hosts may restrict remote access regardless of this setting. Check with your host provider.
+</Note>
+
+## Common Use Cases
+
+<AccordionGroup>
+  <Accordion title="Minecraft Plugin Storage">
+    Many Minecraft plugins require MySQL for data storage:
+    
+    **LuckPerms:**
+    ```yaml
+storage-method: MySQL
+data:
+  address: mysql.example.com:3306
+  database: s1_minecraft
+  username: u1_xK9pL2mQ
+  password: aB3$kL9mP2qR5vX8
+    ```
+    
+    **CoreProtect:**
+    ```yaml
+table-prefix: co_
+mysql:
+  enable: true
+  host: mysql.example.com
+  port: 3306
+  database: s1_minecraft
+  username: u1_xK9pL2mQ
+  password: aB3$kL9mP2qR5vX8
+    ```
+  </Accordion>
+  
+  <Accordion title="Game Statistics & Leaderboards">
+    Store player stats, rankings, and leaderboards:
+    
+    ```sql
+    CREATE TABLE player_stats (
+      player_uuid VARCHAR(36) PRIMARY KEY,
+      kills INT DEFAULT 0,
+      deaths INT DEFAULT 0,
+      playtime INT DEFAULT 0,
+      last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    ```
+  </Accordion>
+  
+  <Accordion title="Website Integration">
+    Connect your server to a website or forum:
+    
+    - Sync player ranks between game and site
+    - Display online players on website
+    - Integrated donation systems
+    - Ban lists and appeal systems
+  </Accordion>
+  
+  <Accordion title="Multi-Server Synchronization">
+    Share data across multiple game servers:
+    
+    - Cross-server chat
+    - Global economy
+    - Network-wide bans
+    - Synchronized player data
+    
+    Create a shared database and configure all servers to use it.
+  </Accordion>
+</AccordionGroup>
+
+## Accessing via Command Line
+
+Connect to your database using the MySQL client:
+
+```bash
+mysql -h mysql.example.com -P 3306 -u u1_xK9pL2mQ -p s1_minecraft
+Enter password: aB3$kL9mP2qR5vX8
+```
+
+Or with a one-liner:
+
+```bash
+mysql -h mysql.example.com -P 3306 -u u1_xK9pL2mQ -paB3$kL9mP2qR5vX8 s1_minecraft
+```
+
+<Warning>
+Avoid using the password in the command line on shared systems as it may be visible in process lists.
+</Warning>
+
+## Activity Logging
+
+Database operations are logged:
+
+```json Example Logs
+{
+  "event": "server:database.create",
+  "properties": {
+    "name": "s1_minecraft"
+  }
+}
+
+{
+  "event": "server:database.rotate-password",
+  "properties": {
+    "name": "s1_minecraft"
+  }
+}
+
+{
+  "event": "server:database.delete",
+  "properties": {
+    "name": "s1_minecraft"
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Descriptive Names">
+    Name databases based on their purpose: `economy`, `stats`, `auth`, etc. This makes management easier.
+  </Accordion>
+  
+  <Accordion title="Regular Backups">
+    Database backups are separate from server file backups. Use `mysqldump` or your host's backup tools:
+    
+    ```bash
+    mysqldump -h mysql.example.com -u u1_xK9pL2mQ -p s1_minecraft > backup.sql
+    ```
+  </Accordion>
+  
+  <Accordion title="Limit Remote Access">
+    If you don't need external connections, use `localhost` for the remote field to improve security.
+  </Accordion>
+  
+  <Accordion title="Monitor Connection Usage">
+    Some database hosts limit concurrent connections. Monitor your plugins' connection pool settings.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Cannot Connect to Database">
+    - Verify host and port are correct
+    - Check remote access configuration
+    - Ensure password is correct (try rotating)
+    - Verify firewall allows MySQL port (3306)
+    - Check database host is online
+  </Accordion>
+  
+  <Accordion title="Access Denied Errors">
+    - Confirm username and password
+    - Check `remote` field allows your IP
+    - Verify database exists on the host
+    - Check database host allows external connections
+  </Accordion>
+  
+  <Accordion title="Too Many Connections">
+    - Reduce plugin connection pool sizes
+    - Enable connection pooling
+    - Contact host to increase limit
+    - Check for connection leaks in plugins
+  </Accordion>
+  
+  <Accordion title="Database Limit Reached">
+    You've hit the maximum databases for your server. Options:
+    - Delete unused databases
+    - Request limit increase from admin
+    - Consolidate data into fewer databases
+  </Accordion>
+</AccordionGroup>

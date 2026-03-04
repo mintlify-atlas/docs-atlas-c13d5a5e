@@ -1,0 +1,357 @@
+---
+title: Users
+description: Manage user accounts on the Panel
+---
+
+The Users API allows you to create, view, update, and delete user accounts on the Pterodactyl Panel. Users can be assigned as server owners and can be granted administrative privileges.
+
+## List Users
+
+<CodeGroup>
+```bash cURL
+curl "https://panel.example.com/api/application/users" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json"
+```
+</CodeGroup>
+
+Retrieves a paginated list of all users on the Panel.
+
+### Query Parameters
+
+<ParamField query="per_page" type="integer" default="50">
+  Number of results per page
+</ParamField>
+
+<ParamField query="filter[email]" type="string">
+  Filter users by email address
+</ParamField>
+
+<ParamField query="filter[uuid]" type="string">
+  Filter users by UUID
+</ParamField>
+
+<ParamField query="filter[username]" type="string">
+  Filter users by username
+</ParamField>
+
+<ParamField query="filter[external_id]" type="string">
+  Filter users by external identifier
+</ParamField>
+
+<ParamField query="sort" type="string">
+  Sort by field. Available: `id`, `uuid`. Prefix with `-` for descending order
+</ParamField>
+
+### Response
+
+<ResponseField name="object" type="string">
+  Always `list`
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of user objects
+  
+  <Expandable title="User Object">
+    <ResponseField name="id" type="integer">
+      Internal user ID
+    </ResponseField>
+    
+    <ResponseField name="external_id" type="string | null">
+      External identifier for third-party integrations
+    </ResponseField>
+    
+    <ResponseField name="uuid" type="string">
+      Unique identifier for the user
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      Username (stored as lowercase)
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      User email address
+    </ResponseField>
+    
+    <ResponseField name="first_name" type="string">
+      User's first name
+    </ResponseField>
+    
+    <ResponseField name="last_name" type="string">
+      User's last name
+    </ResponseField>
+    
+    <ResponseField name="language" type="string">
+      User's preferred language code (e.g., `en`)
+    </ResponseField>
+    
+    <ResponseField name="root_admin" type="boolean">
+      Whether the user has administrator privileges
+    </ResponseField>
+    
+    <ResponseField name="2fa" type="boolean">
+      Whether two-factor authentication is enabled
+    </ResponseField>
+    
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp of creation
+    </ResponseField>
+    
+    <ResponseField name="updated_at" type="string">
+      ISO 8601 timestamp of last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "user",
+      "attributes": {
+        "id": 1,
+        "external_id": null,
+        "uuid": "c4022c6c-9bf1-4a23-bff9-519cceb38335",
+        "username": "admin",
+        "email": "admin@example.com",
+        "first_name": "Admin",
+        "last_name": "User",
+        "language": "en",
+        "root_admin": true,
+        "2fa": false,
+        "created_at": "2024-01-01T00:00:00+00:00",
+        "updated_at": "2024-01-15T12:30:00+00:00"
+      }
+    }
+  ],
+  "meta": {
+    "pagination": {
+      "total": 1,
+      "count": 1,
+      "per_page": 50,
+      "current_page": 1,
+      "total_pages": 1
+    }
+  }
+}
+```
+</ResponseExample>
+
+## Get User Details
+
+<CodeGroup>
+```bash cURL
+curl "https://panel.example.com/api/application/users/{user_id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Retrieves details for a specific user.
+
+### Path Parameters
+
+<ParamField path="user_id" type="integer" required>
+  The internal ID of the user
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="include" type="string">
+  Include related resources. Available: `servers`
+</ParamField>
+
+## Get User by External ID
+
+<CodeGroup>
+```bash cURL
+curl "https://panel.example.com/api/application/users/external/{external_id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Retrieves a user by their external identifier.
+
+### Path Parameters
+
+<ParamField path="external_id" type="string" required>
+  The external identifier of the user
+</ParamField>
+
+## Create User
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://panel.example.com/api/application/users" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "username": "newuser",
+    "first_name": "John",
+    "last_name": "Doe",
+    "password": "SecurePassword123"
+  }'
+```
+</CodeGroup>
+
+Creates a new user account on the Panel.
+
+### Request Body
+
+<ParamField body="email" type="string" required>
+  User email address (must be unique)
+</ParamField>
+
+<ParamField body="username" type="string" required>
+  Username (must be unique, will be converted to lowercase)
+</ParamField>
+
+<ParamField body="first_name" type="string" required>
+  User's first name
+</ParamField>
+
+<ParamField body="last_name" type="string" required>
+  User's last name
+</ParamField>
+
+<ParamField body="password" type="string">
+  User password. If not provided, user will need to reset password
+</ParamField>
+
+<ParamField body="external_id" type="string">
+  External identifier for third-party integrations (must be unique)
+</ParamField>
+
+<ParamField body="language" type="string" default="en">
+  User's preferred language code
+</ParamField>
+
+<ParamField body="root_admin" type="boolean" default={false}>
+  Whether to grant administrator privileges
+</ParamField>
+
+### Response
+
+Returns the created user object with HTTP status `201 Created`.
+
+<ResponseExample>
+```json
+{
+  "object": "user",
+  "attributes": {
+    "id": 2,
+    "external_id": null,
+    "uuid": "8d4f8c5e-2b7a-4c9d-8e1f-9a3b4c5d6e7f",
+    "username": "newuser",
+    "email": "user@example.com",
+    "first_name": "John",
+    "last_name": "Doe",
+    "language": "en",
+    "root_admin": false,
+    "2fa": false,
+    "created_at": "2024-03-04T00:00:00+00:00",
+    "updated_at": "2024-03-04T00:00:00+00:00"
+  },
+  "meta": {
+    "resource": "https://panel.example.com/api/application/users/2"
+  }
+}
+```
+</ResponseExample>
+
+## Update User
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH "https://panel.example.com/api/application/users/{user_id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "newemail@example.com",
+    "username": "updateduser",
+    "first_name": "John",
+    "last_name": "Smith"
+  }'
+```
+</CodeGroup>
+
+Updates an existing user's information.
+
+### Path Parameters
+
+<ParamField path="user_id" type="integer" required>
+  The internal ID of the user to update
+</ParamField>
+
+### Request Body
+
+All fields are optional. Only include fields you want to update.
+
+<ParamField body="email" type="string">
+  New email address
+</ParamField>
+
+<ParamField body="username" type="string">
+  New username
+</ParamField>
+
+<ParamField body="first_name" type="string">
+  New first name
+</ParamField>
+
+<ParamField body="last_name" type="string">
+  New last name
+</ParamField>
+
+<ParamField body="password" type="string">
+  New password
+</ParamField>
+
+<ParamField body="external_id" type="string">
+  New external identifier
+</ParamField>
+
+<ParamField body="language" type="string">
+  New language preference
+</ParamField>
+
+<ParamField body="root_admin" type="boolean">
+  Update administrator status
+</ParamField>
+
+### Response
+
+Returns the updated user object.
+
+## Delete User
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE "https://panel.example.com/api/application/users/{user_id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Deletes a user from the Panel. The user must not own any servers.
+
+### Path Parameters
+
+<ParamField path="user_id" type="integer" required>
+  The internal ID of the user to delete
+</ParamField>
+
+### Response
+
+Returns HTTP status `204 No Content` on successful deletion.
+
+<Warning>
+A user cannot be deleted if they currently own any servers. Transfer or delete their servers first.
+</Warning>

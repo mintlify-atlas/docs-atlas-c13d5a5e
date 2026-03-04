@@ -1,0 +1,354 @@
+---
+title: Server Management
+description: Creating, configuring, and managing game servers in Pterodactyl Panel
+---
+
+The Server Management section provides full control over game servers hosted on your Pterodactyl installation. Administrators can create, configure, modify, and delete servers across all nodes.
+
+## Server Model Overview
+
+Servers are the core resource in Pterodactyl. Each server (from `app/Models/Server.php:153-176`) contains:
+
+```php
+public static array $validationRules = [
+    'external_id' => 'sometimes|nullable|string|between:1,191|unique:servers',
+    'owner_id' => 'required|integer|exists:users,id',
+    'name' => 'required|string|min:1|max:191',
+    'node_id' => 'required|exists:nodes,id',
+    'description' => 'string',
+    'memory' => 'required|numeric|min:0',
+    'swap' => 'required|numeric|min:-1',
+    'io' => 'required|numeric|between:10,1000',
+    'cpu' => 'required|numeric|min:0',
+    'threads' => 'nullable|regex:/^[0-9-,]+$/',
+    'disk' => 'required|numeric|min:0',
+    'allocation_id' => 'required|bail|unique:servers|exists:allocations,id',
+    'nest_id' => 'required|exists:nests,id',
+    'egg_id' => 'required|exists:eggs,id',
+    'startup' => 'required|string',
+    'skip_scripts' => 'sometimes|boolean',
+    'image' => ['required', 'string', 'max:191'],
+    'database_limit' => 'present|nullable|integer|min:0',
+    'allocation_limit' => 'sometimes|nullable|integer|min:0',
+    'backup_limit' => 'present|nullable|integer|min:0',
+];
+```
+
+## Creating a New Server
+
+<Warning>
+Before creating servers, you must have at least one node configured. If no nodes exist, you'll be redirected to the node creation page.
+</Warning>
+
+<Steps>
+  <Step title="Access Server Creation">
+    Navigate to **Admin Panel** → **Servers** → **Create New**
+  </Step>
+  
+  <Step title="Configure Core Details">
+    **Name and Owner**
+    - **Server Name**: Descriptive name (1-191 characters)
+    - **Owner**: Select the user who will own this server
+    - **External ID**: Optional identifier for external systems
+    - **Description**: Optional server description
+  </Step>
+  
+  <Step title="Select Deployment Location">
+    **Location and Node**
+    - Choose a **Location** to filter available nodes
+    - Select a specific **Node** or use auto-deployment
+    - System will automatically select a viable node if available
+  </Step>
+  
+  <Step title="Configure Resource Limits">
+    **Resource Allocation**
+    - **Memory**: RAM in MB (minimum 0 for unlimited)
+    - **Swap**: Swap space in MB (-1 for unlimited)
+    - **Disk Space**: Storage in MB (minimum 0)
+    - **CPU Limit**: Percentage (0 for unlimited)
+    - **CPU Threads**: Specific thread pinning (e.g., "0,1,2" or "0-2")
+    - **IO Weight**: Block IO weight (10-1000)
+  </Step>
+  
+  <Step title="Set Feature Limits">
+    **Additional Limits**
+    - **Database Limit**: Maximum databases (null for unlimited)
+    - **Allocation Limit**: Maximum IP allocations (null for unlimited)
+    - **Backup Limit**: Maximum backups (0 for none, null for unlimited)
+  </Step>
+  
+  <Step title="Choose Nest and Egg">
+    **Game Configuration**
+    - Select a **Nest** (e.g., Minecraft, Source Engine)
+    - Choose an **Egg** within the nest (e.g., Paper, Vanilla)
+    - The egg determines the server's startup configuration
+  </Step>
+  
+  <Step title="Configure Startup Settings">
+    **Docker and Startup**
+    - **Docker Image**: Pre-filled from egg, or use custom image
+    - **Startup Command**: Modify if needed (from egg template)
+    - **Environment Variables**: Configure egg-specific variables
+  </Step>
+  
+  <Step title="Network Allocation">
+    **IP and Port**
+    - Select the primary **Allocation** (IP:Port)
+    - Optionally add additional allocations
+  </Step>
+  
+  <Step title="Create Server">
+    Click **Create Server** to deploy
+    
+    The server will begin installation in the background.
+  </Step>
+</Steps>
+
+## Server Status States
+
+Servers can be in various states (from `app/Models/Server.php:122-126`):
+
+```php
+public const STATUS_INSTALLING = 'installing';
+public const STATUS_INSTALL_FAILED = 'install_failed';
+public const STATUS_REINSTALL_FAILED = 'reinstall_failed';
+public const STATUS_SUSPENDED = 'suspended';
+public const STATUS_RESTORING_BACKUP = 'restoring_backup';
+```
+
+- **Installing**: Server is being set up
+- **Install Failed**: Installation encountered an error
+- **Reinstall Failed**: Reinstallation failed
+- **Suspended**: Server is suspended (cannot start)
+- **Restoring Backup**: Server is restoring from backup
+- **null**: Normal operational state
+
+## Resource Configuration
+
+### Memory and Swap
+
+- **Memory**: RAM allocated in MB
+  - `0` = Unlimited
+  - Recommended: At least 512MB for most games
+- **Swap**: Virtual memory in MB
+  - `-1` = Unlimited swap
+  - `0` = No swap
+  - Recommended: Equal to memory or 0
+
+### CPU Allocation
+
+- **CPU Limit**: Percentage of total CPU
+  - `100` = One full core
+  - `200` = Two full cores
+  - `0` = Unlimited
+- **Threads**: Pin to specific CPU threads
+  - `"0,1,2"` = Threads 0, 1, and 2
+  - `"0-4"` = Threads 0 through 4
+  - Leave blank for no pinning
+
+### Disk Space
+
+- **Disk**: Storage limit in MB
+  - `0` = Unlimited (use with caution)
+  - Recommended: Allocate based on game requirements
+
+### IO Weight
+
+- **IO Weight**: Block I/O priority (10-1000)
+  - Default: `500`
+  - Higher = More I/O priority
+  - Useful for high-performance servers
+
+## OOM Killer
+
+By default, servers have OOM (Out of Memory) killer disabled:
+
+```php
+protected $attributes = [
+    'status' => self::STATUS_INSTALLING,
+    'oom_disabled' => true,
+    'installed_at' => null,
+];
+```
+
+This prevents the system from killing the container if it exceeds memory limits.
+
+<Note>
+Disabling OOM killer allows servers to use swap space instead of being terminated.
+</Note>
+
+## Custom Docker Images
+
+You can override the egg's default Docker image:
+
+1. Select the egg first
+2. Choose **Custom Image** from the dropdown
+3. Enter the full image name (e.g., `ghcr.io/pterodactyl/yolks:java_17`)
+
+From `app/Http/Controllers/Admin/Servers/CreateServerController.php:72-76`:
+
+```php
+$data = $request->except(['_token']);
+if (!empty($data['custom_image'])) {
+    $data['image'] = $data['custom_image'];
+    unset($data['custom_image']);
+}
+```
+
+## Server Installation Process
+
+When a server is created:
+
+<Steps>
+  <Step title="Server Record Created">
+    Database entry is created with status `installing`
+  </Step>
+  
+  <Step title="Container Created">
+    Docker container is created on the selected node
+  </Step>
+  
+  <Step title="Install Script Runs">
+    Egg's installation script executes (if not skipped)
+  </Step>
+  
+  <Step title="Installation Complete">
+    Status changes to `null` and `installed_at` timestamp is set
+  </Step>
+</Steps>
+
+### Skipping Install Scripts
+
+You can skip the installation script:
+
+- Check **Skip Egg Install Script** during creation
+- Sets `skip_scripts = true`
+- Useful for pre-configured images
+
+## Editing an Existing Server
+
+Administrators can modify all aspects of a server:
+
+### Build Configuration
+
+- Memory, swap, disk, CPU limits
+- IO weight
+- OOM killer setting
+- Database, allocation, and backup limits
+
+### Startup Configuration
+
+- Docker image
+- Startup command
+- Environment variables
+
+### Server Details
+
+- Server name and description
+- Owner assignment
+- External ID
+
+### Network Allocations
+
+- Add/remove IP allocations
+- Change primary allocation
+- Configure port assignments
+
+## Server Suspension
+
+Suspending a server:
+
+1. Sets `status = 'suspended'`
+2. Stops the server if running
+3. Prevents server from starting
+4. Owner loses access to control panel
+
+Check if suspended (from `app/Models/Server.php:218-221`):
+
+```php
+public function isSuspended(): bool
+{
+    return $this->status === self::STATUS_SUSPENDED;
+}
+```
+
+## Server Transfers
+
+Servers can be transferred between nodes:
+
+1. Select target node
+2. Choose new allocation
+3. Transfer begins in background
+4. Server data is synced to new node
+5. Server is moved atomically
+
+<Warning>
+Servers cannot be transferred while installing, suspended, or already transferring.
+</Warning>
+
+## Server Relationships
+
+Each server has relationships to:
+
+- **Owner** (User): The user who owns the server
+- **Node**: The physical/virtual node hosting the server
+- **Nest**: The game category (e.g., Minecraft)
+- **Egg**: The specific game configuration (e.g., Paper)
+- **Allocation**: Primary IP and port
+- **Allocations**: All assigned IPs and ports
+- **Databases**: MySQL databases for the server
+- **Backups**: Server backups
+- **Schedules**: Automated tasks
+- **Subusers**: Additional users with access
+- **Mounts**: Mounted directories
+
+## Deleting a Server
+
+Before deleting:
+
+1. Ensure server is stopped
+2. Back up any important data
+3. Navigate to server detail page
+4. Select **Delete Server**
+5. Confirm deletion
+
+This will:
+- Stop the server
+- Delete the container
+- Remove all server files
+- Delete database records
+- Free up allocations
+
+<Warning>
+Server deletion is permanent and cannot be undone. All data will be lost.
+</Warning>
+
+## Auto-Deployment
+
+When creating a server, you can use auto-deployment:
+
+- Don't select a specific node
+- System finds a viable node automatically
+- Based on resource availability and location
+- Throws exception if no viable node found
+
+## Best Practices
+
+1. **Resource Planning**: Don't over-allocate node resources
+2. **Swap Configuration**: Set swap to 0 or equal to memory
+3. **Backup Limits**: Set reasonable backup limits to prevent disk abuse
+4. **Database Limits**: Limit databases to prevent excessive MySQL connections
+5. **Regular Monitoring**: Check server performance and adjust resources
+6. **Test Installations**: Verify egg install scripts work correctly
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Node Management" icon="cube" href="/admin/nodes">
+    Configure nodes to host your servers
+  </Card>
+  
+  <Card title="Nests & Eggs" icon="egg" href="/admin/nests-eggs">
+    Understand game configurations and templates
+  </Card>
+</CardGroup>

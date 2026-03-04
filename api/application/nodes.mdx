@@ -1,0 +1,471 @@
+---
+title: Nodes
+description: Manage daemon nodes and allocations
+---
+
+The Nodes API allows you to manage the physical or virtual machines that host game servers. Each node runs the Wings daemon and can host multiple servers.
+
+## List Nodes
+
+<CodeGroup>
+```bash cURL
+curl "https://panel.example.com/api/application/nodes" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Retrieves a paginated list of all nodes on the Panel.
+
+### Query Parameters
+
+<ParamField query="per_page" type="integer" default="50">
+  Number of results per page
+</ParamField>
+
+<ParamField query="filter[uuid]" type="string">
+  Filter nodes by UUID
+</ParamField>
+
+<ParamField query="filter[name]" type="string">
+  Filter nodes by name
+</ParamField>
+
+<ParamField query="filter[fqdn]" type="string">
+  Filter nodes by fully qualified domain name
+</ParamField>
+
+<ParamField query="filter[daemon_token_id]" type="string">
+  Filter nodes by daemon token ID
+</ParamField>
+
+<ParamField query="sort" type="string">
+  Sort by field. Available: `id`, `uuid`, `memory`, `disk`. Prefix with `-` for descending
+</ParamField>
+
+<ParamField query="include" type="string">
+  Include related resources. Available: `allocations`, `location`, `servers`
+</ParamField>
+
+### Response
+
+<ResponseField name="object" type="string">
+  Always `list`
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of node objects
+  
+  <Expandable title="Node Object">
+    <ResponseField name="id" type="integer">
+      Internal node ID
+    </ResponseField>
+    
+    <ResponseField name="uuid" type="string">
+      Unique identifier for the node
+    </ResponseField>
+    
+    <ResponseField name="public" type="boolean">
+      Whether the node is publicly visible
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Display name of the node
+    </ResponseField>
+    
+    <ResponseField name="description" type="string | null">
+      Node description
+    </ResponseField>
+    
+    <ResponseField name="location_id" type="integer">
+      ID of the associated location
+    </ResponseField>
+    
+    <ResponseField name="fqdn" type="string">
+      Fully qualified domain name or IP address
+    </ResponseField>
+    
+    <ResponseField name="scheme" type="string">
+      Connection scheme (`http` or `https`)
+    </ResponseField>
+    
+    <ResponseField name="behind_proxy" type="boolean">
+      Whether the daemon is behind a proxy
+    </ResponseField>
+    
+    <ResponseField name="maintenance_mode" type="boolean">
+      Whether the node is in maintenance mode
+    </ResponseField>
+    
+    <ResponseField name="memory" type="integer">
+      Total memory in MB
+    </ResponseField>
+    
+    <ResponseField name="memory_overallocate" type="integer">
+      Memory overallocation percentage
+    </ResponseField>
+    
+    <ResponseField name="disk" type="integer">
+      Total disk space in MB
+    </ResponseField>
+    
+    <ResponseField name="disk_overallocate" type="integer">
+      Disk overallocation percentage
+    </ResponseField>
+    
+    <ResponseField name="upload_size" type="integer">
+      Maximum file upload size in MB
+    </ResponseField>
+    
+    <ResponseField name="daemon_listen" type="integer">
+      Port the daemon listens on
+    </ResponseField>
+    
+    <ResponseField name="daemon_sftp" type="integer">
+      Port for SFTP connections
+    </ResponseField>
+    
+    <ResponseField name="daemon_base" type="string">
+      Base directory for server files
+    </ResponseField>
+    
+    <ResponseField name="allocated_resources" type="object">
+      Currently allocated resources
+      <Expandable title="Allocated Resources">
+        <ResponseField name="memory" type="integer">
+          Total allocated memory in MB
+        </ResponseField>
+        <ResponseField name="disk" type="integer">
+          Total allocated disk in MB
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp of creation
+    </ResponseField>
+    
+    <ResponseField name="updated_at" type="string">
+      ISO 8601 timestamp of last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "node",
+      "attributes": {
+        "id": 1,
+        "uuid": "6d5f8c4e-2b3a-4c9d-8e1f-9a3b4c5d6e7f",
+        "public": true,
+        "name": "US-1",
+        "description": "Primary US node",
+        "location_id": 1,
+        "fqdn": "node1.example.com",
+        "scheme": "https",
+        "behind_proxy": false,
+        "maintenance_mode": false,
+        "memory": 32768,
+        "memory_overallocate": 0,
+        "disk": 512000,
+        "disk_overallocate": 0,
+        "upload_size": 100,
+        "daemon_listen": 8080,
+        "daemon_sftp": 2022,
+        "daemon_base": "/var/lib/pterodactyl/volumes",
+        "allocated_resources": {
+          "memory": 16384,
+          "disk": 102400
+        },
+        "created_at": "2024-01-01T00:00:00+00:00",
+        "updated_at": "2024-03-01T00:00:00+00:00"
+      }
+    }
+  ]
+}
+```
+</ResponseExample>
+
+## Get Node Details
+
+<CodeGroup>
+```bash cURL
+curl "https://panel.example.com/api/application/nodes/{node_id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Retrieves details for a specific node.
+
+### Path Parameters
+
+<ParamField path="node_id" type="integer" required>
+  The internal ID of the node
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="include" type="string">
+  Include related resources. Available: `allocations`, `location`, `servers`
+</ParamField>
+
+## Get Node Configuration
+
+<CodeGroup>
+```bash cURL
+curl "https://panel.example.com/api/application/nodes/{node_id}/configuration" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Retrieves the Wings configuration for a specific node.
+
+### Path Parameters
+
+<ParamField path="node_id" type="integer" required>
+  The internal ID of the node
+</ParamField>
+
+## Get Deployable Nodes
+
+<CodeGroup>
+```bash cURL
+curl "https://panel.example.com/api/application/nodes/deployable" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Retrieves a list of nodes that have available resources for deployment.
+
+## Create Node
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://panel.example.com/api/application/nodes" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "US-2",
+    "description": "Secondary US node",
+    "location_id": 1,
+    "fqdn": "node2.example.com",
+    "scheme": "https",
+    "memory": 32768,
+    "disk": 512000,
+    "daemon_listen": 8080,
+    "daemon_sftp": 2022
+  }'
+```
+</CodeGroup>
+
+Creates a new node on the Panel.
+
+### Request Body
+
+<ParamField body="name" type="string" required>
+  Display name for the node (1-100 characters)
+</ParamField>
+
+<ParamField body="location_id" type="integer" required>
+  ID of the location this node belongs to
+</ParamField>
+
+<ParamField body="fqdn" type="string" required>
+  Fully qualified domain name or IP address
+</ParamField>
+
+<ParamField body="scheme" type="string" required>
+  Connection scheme: `http` or `https`
+</ParamField>
+
+<ParamField body="memory" type="integer" required>
+  Total memory in MB
+</ParamField>
+
+<ParamField body="disk" type="integer" required>
+  Total disk space in MB
+</ParamField>
+
+<ParamField body="daemon_listen" type="integer" required>
+  Port the daemon listens on (typically 8080)
+</ParamField>
+
+<ParamField body="daemon_sftp" type="integer" required>
+  Port for SFTP connections (typically 2022)
+</ParamField>
+
+<ParamField body="description" type="string">
+  Optional description of the node
+</ParamField>
+
+<ParamField body="public" type="boolean" default={true}>
+  Whether the node is publicly visible
+</ParamField>
+
+<ParamField body="behind_proxy" type="boolean" default={false}>
+  Whether the daemon is behind a proxy
+</ParamField>
+
+<ParamField body="maintenance_mode" type="boolean" default={false}>
+  Whether to enable maintenance mode
+</ParamField>
+
+<ParamField body="memory_overallocate" type="integer" default={0}>
+  Memory overallocation percentage (-1 to 100)
+</ParamField>
+
+<ParamField body="disk_overallocate" type="integer" default={0}>
+  Disk overallocation percentage (-1 to 100)
+</ParamField>
+
+<ParamField body="upload_size" type="integer" default={100}>
+  Maximum file upload size in MB
+</ParamField>
+
+<ParamField body="daemon_base" type="string">
+  Base directory for server files (defaults to `/var/lib/pterodactyl/volumes`)
+</ParamField>
+
+### Response
+
+Returns the created node object with HTTP status `201 Created`.
+
+## Update Node
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH "https://panel.example.com/api/application/nodes/{node_id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "US-2 Updated",
+    "memory": 65536
+  }'
+```
+</CodeGroup>
+
+Updates an existing node's configuration.
+
+### Path Parameters
+
+<ParamField path="node_id" type="integer" required>
+  The internal ID of the node to update
+</ParamField>
+
+### Request Body
+
+All fields are optional. Only include fields you want to update. Accepts the same fields as Create Node.
+
+<ParamField body="reset_secret" type="boolean" default={false}>
+  Whether to regenerate the daemon secret token
+</ParamField>
+
+### Response
+
+Returns the updated node object.
+
+## Delete Node
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE "https://panel.example.com/api/application/nodes/{node_id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Deletes a node from the Panel. The node must not have any active servers.
+
+### Path Parameters
+
+<ParamField path="node_id" type="integer" required>
+  The internal ID of the node to delete
+</ParamField>
+
+### Response
+
+Returns HTTP status `204 No Content` on successful deletion.
+
+<Warning>
+A node cannot be deleted if it has any servers assigned to it. Delete or transfer the servers first.
+</Warning>
+
+## Allocations
+
+### List Allocations
+
+<CodeGroup>
+```bash cURL
+curl "https://panel.example.com/api/application/nodes/{node_id}/allocations" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Retrieves all IP allocations for a specific node.
+
+### Path Parameters
+
+<ParamField path="node_id" type="integer" required>
+  The internal ID of the node
+</ParamField>
+
+### Create Allocations
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://panel.example.com/api/application/nodes/{node_id}/allocations" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ip": "192.168.1.100",
+    "ports": ["25565", "25566-25570"]
+  }'
+```
+</CodeGroup>
+
+Creates new IP allocations for a node.
+
+<ParamField body="ip" type="string" required>
+  IP address to allocate
+</ParamField>
+
+<ParamField body="ports" type="array" required>
+  Array of ports or port ranges (e.g., `["25565", "25566-25570"]`)
+</ParamField>
+
+<ParamField body="alias" type="string">
+  Optional alias for the IP address
+</ParamField>
+
+### Delete Allocation
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE "https://panel.example.com/api/application/nodes/{node_id}/allocations/{allocation_id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Deletes a specific allocation. The allocation must not be assigned to a server.
+
+### Path Parameters
+
+<ParamField path="node_id" type="integer" required>
+  The internal ID of the node
+</ParamField>
+
+<ParamField path="allocation_id" type="integer" required>
+  The internal ID of the allocation to delete
+</ParamField>

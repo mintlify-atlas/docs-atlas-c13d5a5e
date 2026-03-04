@@ -1,0 +1,395 @@
+---
+title: Database Configuration
+description: Configure MySQL and MariaDB database connections for Pterodactyl Panel
+---
+
+Pterodactyl Panel requires a MySQL (8.0+) or MariaDB (10.2+) database to store panel data.
+
+## Basic Configuration
+
+### Database Connection
+
+```bash .env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=panel
+DB_USERNAME=pterodactyl
+DB_PASSWORD=your_secure_password
+```
+
+<ParamField path="DB_CONNECTION" type="string" default="mysql">
+  Database driver to use. Options: `mysql`, `mariadb`
+  
+  <Info>
+    Both drivers work with MySQL and MariaDB. The `mariadb` driver enables MariaDB-specific optimizations.
+  </Info>
+</ParamField>
+
+<ParamField path="DB_HOST" type="string" default="127.0.0.1">
+  Database server hostname or IP address.
+</ParamField>
+
+<ParamField path="DB_PORT" type="integer" default="3306">
+  Database server port.
+</ParamField>
+
+<ParamField path="DB_DATABASE" type="string" default="panel">
+  Name of the database to use.
+</ParamField>
+
+<ParamField path="DB_USERNAME" type="string" default="pterodactyl">
+  Database user with access to the panel database.
+</ParamField>
+
+<ParamField path="DB_PASSWORD" type="string" required>
+  Database user password.
+  
+  <Warning>
+    Use a strong, randomly generated password for production environments.
+  </Warning>
+</ParamField>
+
+## Advanced Configuration
+
+### Unix Socket Connection
+
+For local databases, Unix sockets provide better performance than TCP:
+
+```bash .env
+DB_HOST=localhost
+DB_SOCKET=/var/run/mysqld/mysqld.sock
+```
+
+<ParamField path="DB_SOCKET" type="string">
+  Path to MySQL/MariaDB Unix socket file. When set, this takes precedence over `DB_HOST` and `DB_PORT`.
+</ParamField>
+
+### Database URL
+
+Alternatively, use a database URL for configuration:
+
+```bash .env
+DB_URL=mysql://pterodactyl:password@127.0.0.1:3306/panel
+```
+
+<ParamField path="DB_URL" type="string">
+  Full database connection URL. Overrides individual connection parameters.
+</ParamField>
+
+### Character Set & Collation
+
+```bash .env
+DB_CHARSET=utf8mb4
+DB_COLLATION=utf8mb4_unicode_ci
+```
+
+<ParamField path="DB_CHARSET" type="string" default="utf8mb4">
+  Character set for database connections.
+  
+  <Warning>
+    Do not change this unless you know what you're doing. `utf8mb4` is required for full Unicode support.
+  </Warning>
+</ParamField>
+
+<ParamField path="DB_COLLATION" type="string" default="utf8mb4_unicode_ci">
+  Collation for character comparisons and sorting.
+</ParamField>
+
+### Table Prefix
+
+```bash .env
+DB_PREFIX=ptdl_
+```
+
+<ParamField path="DB_PREFIX" type="string">
+  Prefix for all database tables. Useful when sharing a database with other applications.
+</ParamField>
+
+### Timezone Configuration
+
+```bash .env
+DB_TIMEZONE=+00:00
+```
+
+<ParamField path="DB_TIMEZONE" type="string">
+  MySQL timezone offset. Automatically calculated from `APP_TIMEZONE` if not set.
+  
+  <Info>
+    The Panel automatically converts `APP_TIMEZONE` to a MySQL-compatible offset.
+  </Info>
+</ParamField>
+
+### Strict Mode
+
+```bash .env
+DB_STRICT_MODE=false
+```
+
+<ParamField path="DB_STRICT_MODE" type="boolean" default="false">
+  Enable MySQL strict mode for stricter SQL validation.
+  
+  <Note>
+    Currently defaults to `false` for compatibility. Future versions may default to `true`.
+  </Note>
+</ParamField>
+
+## SSL/TLS Configuration
+
+Secure your database connection with SSL/TLS encryption.
+
+### Basic SSL
+
+```bash .env
+DB_SSLMODE=require
+```
+
+<ParamField path="DB_SSLMODE" type="string" default="prefer">
+  SSL connection mode. Options:
+  - `prefer` - Use SSL if available, otherwise unencrypted
+  - `require` - Require SSL connection
+  - `verify-ca` - Require SSL and verify CA certificate
+  - `verify-full` - Require SSL and verify certificate identity
+</ParamField>
+
+### Advanced SSL Configuration
+
+For certificate-based authentication:
+
+```bash .env
+DB_SSLMODE=verify-ca
+MYSQL_ATTR_SSL_CA=/path/to/ca-cert.pem
+MYSQL_ATTR_SSL_CERT=/path/to/client-cert.pem
+MYSQL_ATTR_SSL_KEY=/path/to/client-key.pem
+MYSQL_ATTR_SSL_VERIFY_SERVER_CERT=true
+```
+
+<ParamField path="MYSQL_ATTR_SSL_CA" type="string">
+  Path to Certificate Authority (CA) certificate file.
+</ParamField>
+
+<ParamField path="MYSQL_ATTR_SSL_CERT" type="string">
+  Path to client certificate file.
+</ParamField>
+
+<ParamField path="MYSQL_ATTR_SSL_KEY" type="string">
+  Path to client private key file.
+</ParamField>
+
+<ParamField path="MYSQL_ATTR_SSL_VERIFY_SERVER_CERT" type="boolean" default="true">
+  Verify the server's SSL certificate.
+  
+  <Warning>
+    Only disable for testing with self-signed certificates. Always enable in production.
+  </Warning>
+</ParamField>
+
+## Database Setup
+
+### Creating the Database
+
+1. Log into MySQL/MariaDB:
+   ```bash
+   mysql -u root -p
+   ```
+
+2. Create the database and user:
+   ```sql
+   CREATE DATABASE panel;
+   CREATE USER 'pterodactyl'@'127.0.0.1' IDENTIFIED BY 'your_secure_password';
+   GRANT ALL PRIVILEGES ON panel.* TO 'pterodactyl'@'127.0.0.1';
+   FLUSH PRIVILEGES;
+   EXIT;
+   ```
+
+### Running Migrations
+
+After configuring the database connection, run migrations:
+
+```bash
+php artisan migrate --seed --force
+```
+
+The `--seed` flag populates the database with default data, and `--force` is required in production.
+
+## Remote Database Configuration
+
+### Connecting to Remote MySQL/MariaDB
+
+```bash .env
+DB_HOST=db.example.com
+DB_PORT=3306
+DB_DATABASE=panel
+DB_USERNAME=pterodactyl
+DB_PASSWORD=your_secure_password
+DB_SSLMODE=require
+```
+
+<Warning>
+  Always use SSL/TLS when connecting to remote databases to encrypt traffic.
+</Warning>
+
+### Firewall Configuration
+
+Ensure your database server allows connections from the Panel server:
+
+```bash
+# On the database server (Ubuntu/Debian)
+ufw allow from PANEL_IP to any port 3306
+```
+
+### MySQL User Permissions
+
+For remote connections, create the user with the Panel server's IP:
+
+```sql
+CREATE USER 'pterodactyl'@'PANEL_IP' IDENTIFIED BY 'your_secure_password';
+GRANT ALL PRIVILEGES ON panel.* TO 'pterodactyl'@'PANEL_IP';
+FLUSH PRIVILEGES;
+```
+
+## Performance Optimization
+
+### Connection Pooling
+
+Laravel automatically manages connection pooling. No additional configuration needed.
+
+### Query Optimization
+
+Enable query logging during development to identify slow queries:
+
+```bash
+php artisan db:monitor --max=100
+```
+
+## Testing the Connection
+
+Verify your database connection:
+
+```bash
+php artisan migrate:status
+```
+
+This command will fail if the database connection is misconfigured.
+
+### Connection Test Script
+
+```bash
+php artisan tinker
+```
+
+```php
+DB::connection()->getPdo();
+// Should return: PDO object
+
+DB::select('SELECT VERSION()');
+// Should return: MySQL/MariaDB version
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection Refused">
+    **Possible causes:**
+    - MySQL/MariaDB service is not running
+    - Incorrect `DB_HOST` or `DB_PORT`
+    - Firewall blocking connections
+    
+    **Solutions:**
+    ```bash
+    # Check if MySQL is running
+    systemctl status mysql
+    
+    # Verify port is listening
+    netstat -tlnp | grep 3306
+    
+    # Test connection
+    mysql -h 127.0.0.1 -u pterodactyl -p
+    ```
+  </Accordion>
+
+  <Accordion title="Access Denied for User">
+    **Possible causes:**
+    - Incorrect username or password
+    - User doesn't have permissions for the database
+    - User host restriction mismatch
+    
+    **Solutions:**
+    ```sql
+    -- Check user exists
+    SELECT User, Host FROM mysql.user WHERE User = 'pterodactyl';
+    
+    -- Grant permissions
+    GRANT ALL PRIVILEGES ON panel.* TO 'pterodactyl'@'127.0.0.1';
+    FLUSH PRIVILEGES;
+    ```
+  </Accordion>
+
+  <Accordion title="SSL Connection Error">
+    **Possible causes:**
+    - MySQL not configured for SSL
+    - Invalid certificate paths
+    - Certificate verification failures
+    
+    **Solutions:**
+    ```bash
+    # Check MySQL SSL status
+    mysql -u root -p -e "SHOW VARIABLES LIKE '%ssl%';"
+    
+    # Verify certificate files exist and are readable
+    ls -l /path/to/ssl/certs/
+    
+    # Test SSL connection manually
+    mysql -h db.example.com -u pterodactyl -p --ssl-mode=REQUIRED
+    ```
+  </Accordion>
+
+  <Accordion title="Character Set Issues">
+    **Symptoms:**
+    - Emoji or special characters not displaying correctly
+    - Database errors related to character encoding
+    
+    **Solution:**
+    ```sql
+    -- Check database charset
+    SELECT DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME 
+    FROM information_schema.SCHEMATA 
+    WHERE SCHEMA_NAME = 'panel';
+    
+    -- Convert database to utf8mb4
+    ALTER DATABASE panel CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Strong Passwords" icon="key">
+    Use randomly generated passwords with at least 32 characters for database users.
+  </Card>
+  
+  <Card title="Restrict User Access" icon="user-lock">
+    Grant database users only the permissions they need, and restrict by host.
+  </Card>
+  
+  <Card title="Use SSL/TLS" icon="lock">
+    Enable SSL/TLS for all database connections, especially for remote databases.
+  </Card>
+  
+  <Card title="Regular Backups" icon="database">
+    Implement automated database backups with point-in-time recovery capabilities.
+  </Card>
+</CardGroup>
+
+## Supported Database Versions
+
+<Note>
+  **Minimum Requirements:**
+  - MySQL 8.0 or higher
+  - MariaDB 10.2 or higher
+  
+  **Recommended:**
+  - MySQL 8.0.34+
+  - MariaDB 10.11+ (LTS)
+</Note>

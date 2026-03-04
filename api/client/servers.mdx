@@ -1,0 +1,364 @@
+---
+title: Server Management
+description: List servers, retrieve details, manage power state, and connect to console
+---
+
+The server endpoints provide access to server information, power management, and real-time console connections.
+
+## List Servers
+
+Get all servers the authenticated user has access to.
+
+```bash
+curl -X GET "https://panel.example.com/api/client" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+### Response
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "server",
+      "attributes": {
+        "server_owner": true,
+        "identifier": "1a2b3c4d",
+        "uuid": "1a2b3c4d-5e6f-7g8h-9i0j-1k2l3m4n5o6p",
+        "name": "My Minecraft Server",
+        "node": "node01",
+        "sftp_details": {
+          "ip": "node01.example.com",
+          "port": 2022
+        },
+        "description": "A server for friends",
+        "limits": {
+          "memory": 2048,
+          "swap": 0,
+          "disk": 10240,
+          "io": 500,
+          "cpu": 200,
+          "threads": null,
+          "oom_disabled": true
+        },
+        "invocation": "java -Xms128M -Xmx2048M -jar server.jar",
+        "docker_image": "ghcr.io/pterodactyl/yolks:java_17",
+        "feature_limits": {
+          "databases": 2,
+          "allocations": 1,
+          "backups": 3
+        },
+        "status": null,
+        "is_suspended": false,
+        "is_installing": false,
+        "is_transferring": false
+      }
+    }
+  ]
+}
+```
+
+## Get Server Details
+
+Retrieve detailed information about a specific server.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+<ParamField path="server" type="string" required>
+  The server identifier (short UUID)
+</ParamField>
+
+### Response
+
+```json
+{
+  "object": "server",
+  "attributes": {
+    "server_owner": true,
+    "identifier": "1a2b3c4d",
+    "internal_id": 5,
+    "uuid": "1a2b3c4d-5e6f-7g8h-9i0j-1k2l3m4n5o6p",
+    "name": "My Minecraft Server",
+    "node": "node01",
+    "is_node_under_maintenance": false,
+    "sftp_details": {
+      "ip": "node01.example.com",
+      "port": 2022
+    },
+    "description": "A server for friends",
+    "limits": {
+      "memory": 2048,
+      "swap": 0,
+      "disk": 10240,
+      "io": 500,
+      "cpu": 200,
+      "threads": null,
+      "oom_disabled": true
+    },
+    "invocation": "java -Xms128M -Xmx2048M -jar server.jar",
+    "docker_image": "ghcr.io/pterodactyl/yolks:java_17",
+    "egg_features": ["eula", "java_version"],
+    "feature_limits": {
+      "databases": 2,
+      "allocations": 1,
+      "backups": 3
+    },
+    "status": null,
+    "is_suspended": false,
+    "is_installing": false,
+    "is_transferring": false
+  },
+  "meta": {
+    "is_server_owner": true,
+    "user_permissions": [
+      "control.console",
+      "control.start",
+      "control.stop",
+      "control.restart",
+      "user.read",
+      "file.read",
+      "file.write",
+      "backup.create",
+      "allocation.read",
+      "startup.read",
+      "database.read"
+    ]
+  }
+}
+```
+
+<ResponseField name="server_owner" type="boolean">
+  Whether the authenticated user owns this server
+</ResponseField>
+
+<ResponseField name="identifier" type="string">
+  Short UUID identifier for the server
+</ResponseField>
+
+<ResponseField name="uuid" type="string">
+  Full UUID of the server
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Server display name
+</ResponseField>
+
+<ResponseField name="node" type="string">
+  Name of the node hosting this server
+</ResponseField>
+
+<ResponseField name="limits" type="object">
+  Resource limits for the server (memory in MB, disk in MB, CPU as percentage)
+</ResponseField>
+
+<ResponseField name="status" type="string|null">
+  Current server status: `null` (ready), `installing`, `suspended`, `restoring_backup`
+</ResponseField>
+
+## Get Resource Usage
+
+Retrieve real-time resource utilization for a server.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}/resources" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+### Response
+
+```json
+{
+  "object": "stats",
+  "attributes": {
+    "current_state": "running",
+    "is_suspended": false,
+    "resources": {
+      "memory_bytes": 524288000,
+      "cpu_absolute": 15.5,
+      "disk_bytes": 2147483648,
+      "network_rx_bytes": 1024000,
+      "network_tx_bytes": 512000,
+      "uptime": 3600
+    }
+  }
+}
+```
+
+<ResponseField name="current_state" type="string">
+  Current power state: `running`, `starting`, `stopping`, `offline`
+</ResponseField>
+
+<ResponseField name="resources.memory_bytes" type="integer">
+  Current memory usage in bytes
+</ResponseField>
+
+<ResponseField name="resources.cpu_absolute" type="number">
+  Current CPU usage percentage
+</ResponseField>
+
+<ResponseField name="resources.disk_bytes" type="integer">
+  Current disk usage in bytes
+</ResponseField>
+
+<ResponseField name="resources.uptime" type="integer">
+  Server uptime in seconds
+</ResponseField>
+
+## Send Power Action
+
+Change the power state of a server.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/power" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "signal": "start"
+  }'
+```
+
+<ParamField body="signal" type="string" required>
+  Power action to perform:
+  - `start` - Start the server
+  - `stop` - Gracefully stop the server
+  - `restart` - Restart the server
+  - `kill` - Forcefully kill the server process
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+## Send Console Command
+
+Send a command to the server console.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/command" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "say Hello, world!"
+  }'
+```
+
+<ParamField body="command" type="string" required>
+  The command to execute in the server console
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+## WebSocket Connection
+
+Get credentials to connect to the server's WebSocket for real-time console access.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}/websocket" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+### Response
+
+```json
+{
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "socket": "wss://node01.example.com/api/servers/1a2b3c4d-5e6f-7g8h-9i0j-1k2l3m4n5o6p/ws"
+  }
+}
+```
+
+<ResponseField name="token" type="string">
+  JWT token for WebSocket authentication (valid for 10 minutes)
+</ResponseField>
+
+<ResponseField name="socket" type="string">
+  WebSocket URL to connect to
+</ResponseField>
+
+### WebSocket Usage
+
+Connect to the WebSocket using the provided URL and token:
+
+```javascript
+const ws = new WebSocket(socket);
+
+ws.onopen = () => {
+  // Authenticate with the token
+  ws.send(JSON.stringify({
+    event: 'auth',
+    args: [token]
+  }));
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log('Server event:', data);
+};
+
+// Send console output
+ws.send(JSON.stringify({
+  event: 'send command',
+  args: ['say Hello!']
+}));
+
+// Set server state
+ws.send(JSON.stringify({
+  event: 'set state',
+  args: ['start'] // or 'stop', 'restart', 'kill'
+}));
+```
+
+### WebSocket Events
+
+**Incoming Events:**
+- `token expiring` - Token will expire soon, request a new one
+- `token expired` - Token has expired, connection will close
+- `status` - Server status changed
+- `console output` - Console log line
+- `stats` - Resource usage update
+- `daemon message` - Message from Wings daemon
+- `daemon error` - Error from Wings daemon
+
+**Outgoing Events:**
+- `auth` - Authenticate with JWT token
+- `send command` - Execute console command
+- `set state` - Change power state
+- `send logs` - Request console log history
+- `send stats` - Request current resource stats
+
+## Get Activity Logs
+
+Retrieve activity logs for a server.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}/activity" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+### Query Parameters
+
+<ParamField query="page" type="integer">
+  Page number for pagination
+</ParamField>
+
+<ParamField query="per_page" type="integer">
+  Number of results per page (max 100)
+</ParamField>
+
+<ParamField query="sort" type="string">
+  Sort field (prefix with `-` for descending)
+</ParamField>

@@ -1,0 +1,463 @@
+---
+title: File Manager
+description: Web-based file management, editing, and uploading for server files
+---
+
+The file manager provides a complete interface for managing your server's files directly from the web panel. Upload, edit, delete, and organize files without needing FTP or SSH access.
+
+## Browsing Files
+
+List files and directories in any path:
+
+```bash List Directory
+GET /api/client/servers/{server}/files/list?directory=/
+```
+
+```json Response
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "file_object",
+      "attributes": {
+        "name": "server.properties",
+        "mode": "0644",
+        "mode_bits": "-rw-r--r--",
+        "size": 1247,
+        "is_file": true,
+        "is_symlink": false,
+        "mimetype": "text/plain",
+        "created_at": "2025-01-10T08:00:00+00:00",
+        "modified_at": "2025-01-15T10:30:00+00:00"
+      }
+    },
+    {
+      "object": "file_object",
+      "attributes": {
+        "name": "plugins",
+        "mode": "0755",
+        "mode_bits": "drwxr-xr-x",
+        "size": 4096,
+        "is_file": false,
+        "is_symlink": false,
+        "mimetype": "inode/directory",
+        "created_at": "2025-01-10T08:00:00+00:00",
+        "modified_at": "2025-01-12T15:20:00+00:00"
+      }
+    }
+  ]
+}
+```
+
+### File Attributes
+
+- `name` - File or directory name
+- `mode` - Unix permissions (octal)
+- `mode_bits` - Human-readable permissions
+- `size` - File size in bytes
+- `is_file` - True if regular file
+- `is_symlink` - True if symbolic link
+- `mimetype` - Detected MIME type
+- `created_at` - Creation timestamp
+- `modified_at` - Last modification timestamp
+
+## Reading Files
+
+View file contents for editing:
+
+```bash Read File
+GET /api/client/servers/{server}/files/contents?file=/server.properties
+```
+
+```properties Response
+#Minecraft server properties
+server-port=25565
+max-players=20
+difficulty=normal
+gamemode=survival
+motd=Welcome to my server!
+```
+
+<Note>
+Files larger than 5MB (configurable) cannot be edited via the web interface. The size limit is defined by `pterodactyl.files.max_edit_size` in the panel configuration.
+</Note>
+
+## Writing Files
+
+Save changes to existing files or create new ones:
+
+```bash Write File
+POST /api/client/servers/{server}/files/write?file=/server.properties
+Content-Type: text/plain
+
+#Minecraft server properties
+server-port=25565
+max-players=30
+difficulty=hard
+gamemode=survival
+motd=Welcome to my updated server!
+```
+
+```json Success
+HTTP/1.1 204 No Content
+```
+
+<Steps>
+  <Step title="Open File Editor">
+    Click on a file in the file manager to open the built-in editor.
+  </Step>
+  
+  <Step title="Make Changes">
+    Edit the file content. The editor supports syntax highlighting for common formats (JSON, YAML, XML, properties).
+  </Step>
+  
+  <Step title="Save Changes">
+    Click Save to write changes back to the server. The file is written atomically to prevent corruption.
+  </Step>
+</Steps>
+
+## Creating Directories
+
+Create new folders:
+
+```bash Create Directory
+POST /api/client/servers/{server}/files/create-folder
+Content-Type: application/json
+
+{
+  "root": "/",
+  "name": "backups"
+}
+```
+
+```json Success
+HTTP/1.1 204 No Content
+```
+
+The directory is created with `0755` permissions by default.
+
+## Renaming Files
+
+Rename or move files and directories:
+
+```bash Rename Files
+PUT /api/client/servers/{server}/files/rename
+Content-Type: application/json
+
+{
+  "root": "/",
+  "files": [
+    {
+      "from": "old_config.yml",
+      "to": "config.yml"
+    },
+    {
+      "from": "plugins/OldPlugin.jar",
+      "to": "plugins/NewPlugin.jar"
+    }
+  ]
+}
+```
+
+<Note>
+You can rename multiple files in a single request. Paths are relative to the `root` directory.
+</Note>
+
+## Copying Files
+
+Duplicate a file:
+
+```bash Copy File
+POST /api/client/servers/{server}/files/copy
+Content-Type: application/json
+
+{
+  "location": "/config/default.yml"
+}
+```
+
+This creates a copy named `default copy.yml` in the same directory.
+
+## Deleting Files
+
+Delete files or directories:
+
+```bash Delete Files
+POST /api/client/servers/{server}/files/delete
+Content-Type: application/json
+
+{
+  "root": "/",
+  "files": [
+    "old_logs.txt",
+    "temp_folder"
+  ]
+}
+```
+
+<Warning>
+Deletion is permanent and cannot be undone. Directories are deleted recursively with all contents.
+</Warning>
+
+## Uploading Files
+
+Files can be uploaded through the web interface:
+
+<Steps>
+  <Step title="Get Upload URL">
+    Request a signed upload URL:
+    
+    ```bash
+    GET /api/client/servers/{server}/files/upload
+    ```
+    
+    ```json Response
+    {
+      "object": "signed_url",
+      "attributes": {
+        "url": "https://node.example.com:8080/upload/file?token=eyJ0eX..."
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Upload File">
+    POST the file to the Wings upload endpoint:
+    
+    ```bash
+    POST https://node.example.com:8080/upload/file?token=eyJ0eX...
+    Content-Type: multipart/form-data
+    
+    --boundary
+    Content-Disposition: form-data; name="files"; filename="plugin.jar"
+    Content-Type: application/java-archive
+    
+    [binary data]
+    --boundary--
+    ```
+  </Step>
+  
+  <Step title="Verify Upload">
+    The file appears in the file manager immediately. Check the directory listing to confirm.
+  </Step>
+</Steps>
+
+### Upload Limits
+
+- Maximum file size is controlled by Wings configuration
+- Multiple files can be uploaded simultaneously
+- Upload tokens expire after 15 minutes
+
+## Downloading Files
+
+Download files to your computer:
+
+```bash Get Download URL
+GET /api/client/servers/{server}/files/download?file=/plugins/MyPlugin.jar
+```
+
+```json Response
+{
+  "object": "signed_url",
+  "attributes": {
+    "url": "https://node.example.com:8080/download/file?token=eyJ0eX..."
+  }
+}
+```
+
+The URL is valid for 15 minutes. Open it in your browser or use curl:
+
+```bash
+curl -O -J "https://node.example.com:8080/download/file?token=eyJ0eX..."
+```
+
+## Compressing Files
+
+Create archives from multiple files:
+
+```bash Compress Files
+POST /api/client/servers/{server}/files/compress
+Content-Type: application/json
+
+{
+  "root": "/",
+  "files": [
+    "world",
+    "plugins",
+    "config.yml"
+  ]
+}
+```
+
+```json Response
+{
+  "object": "file_object",
+  "attributes": {
+    "name": "archive-2025-01-15-103045.tar.gz",
+    "mode": "0644",
+    "size": 45678901,
+    "is_file": true
+  }
+}
+```
+
+The archive is created as a `.tar.gz` file with a timestamped name.
+
+## Decompressing Archives
+
+Extract `.tar.gz`, `.zip`, or `.rar` files:
+
+```bash Decompress Archive
+POST /api/client/servers/{server}/files/decompress
+Content-Type: application/json
+
+{
+  "root": "/",
+  "file": "backup.tar.gz"
+}
+```
+
+```json Success
+HTTP/1.1 204 No Content
+```
+
+Files are extracted to the same directory as the archive.
+
+<Note>
+Large archives may take time to extract. The operation is performed in the background.
+</Note>
+
+## Changing Permissions
+
+Modify Unix file permissions:
+
+```bash Change Permissions
+POST /api/client/servers/{server}/files/chmod
+Content-Type: application/json
+
+{
+  "root": "/",
+  "files": [
+    {
+      "file": "start.sh",
+      "mode": "0755"
+    },
+    {
+      "file": "config.yml",
+      "mode": "0644"
+    }
+  ]
+}
+```
+
+### Common Permission Modes
+
+| Mode | Bits | Description |
+|------|------|-------------|
+| `0755` | `rwxr-xr-x` | Executable files, directories |
+| `0644` | `rw-r--r--` | Regular files |
+| `0600` | `rw-------` | Private files (configs with passwords) |
+| `0777` | `rwxrwxrwx` | Full permissions (not recommended) |
+
+## Pulling Remote Files
+
+Download files from external URLs directly to your server:
+
+```bash Pull Remote File
+POST /api/client/servers/{server}/files/pull
+Content-Type: application/json
+
+{
+  "url": "https://example.com/files/plugin.jar",
+  "directory": "/plugins",
+  "filename": "MyPlugin.jar",
+  "use_header": false,
+  "foreground": true
+}
+```
+
+### Parameters
+
+- `url` - Remote file URL (must be publicly accessible)
+- `directory` - Destination directory on server
+- `filename` - Optional: override filename
+- `use_header` - Optional: use Content-Disposition header for filename
+- `foreground` - Optional: download in foreground (wait for completion)
+
+<Warning>
+Only use trusted URLs. Downloaded files are not scanned for malware.
+</Warning>
+
+## Activity Logging
+
+All file operations are logged:
+
+```json Example Logs
+{
+  "event": "server:file.write",
+  "properties": {
+    "file": "/server.properties"
+  }
+}
+
+{
+  "event": "server:file.delete",
+  "properties": {
+    "directory": "/",
+    "files": ["old_logs.txt"]
+  }
+}
+
+{
+  "event": "server:file.compress",
+  "properties": {
+    "directory": "/",
+    "files": ["world", "plugins"]
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Backup Before Editing">
+    Always create a backup or copy of important files before editing them, especially configuration files.
+  </Accordion>
+  
+  <Accordion title="Use Proper Permissions">
+    Don't use `0777` unless absolutely necessary. Stick to `0755` for executables and `0644` for regular files.
+  </Accordion>
+  
+  <Accordion title="Organize Files">
+    Keep server files organized in directories. Use descriptive names for custom configs and scripts.
+  </Accordion>
+  
+  <Accordion title="Watch File Sizes">
+    Large files (>5MB) can't be edited in the web interface. Use SFTP for big files.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Cannot Edit Large Files">
+    Files over 5MB cannot be edited via the web interface. Use SFTP or increase the limit in panel configuration:
+    
+    ```php
+    'files' => [
+        'max_edit_size' => 1024 * 1024 * 10, // 10MB
+    ],
+    ```
+  </Accordion>
+  
+  <Accordion title="Permission Denied Errors">
+    Ensure you have the `file.update` or `file.create` permissions. Check that the Wings user has write access to the server directory.
+  </Accordion>
+  
+  <Accordion title="Upload Fails">
+    - Check file size limits in Wings config
+    - Ensure upload token hasn't expired
+    - Verify sufficient disk space
+    - Check Wings logs for errors
+  </Accordion>
+</AccordionGroup>

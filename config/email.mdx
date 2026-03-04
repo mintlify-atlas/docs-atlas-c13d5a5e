@@ -1,0 +1,295 @@
+---
+title: Email Configuration
+description: Configure SMTP, Mailgun, Postmark, and other mail providers for Pterodactyl Panel
+---
+
+Pterodactyl Panel uses email for user notifications, password resets, and administrative alerts. Configure your preferred mail provider in the `.env` file.
+
+## Supported Mail Drivers
+
+The Panel supports multiple mail drivers:
+- **SMTP** - Standard SMTP server (recommended for most users)
+- **Mailgun** - Mailgun API
+- **Postmark** - Postmark API
+- **SES** - Amazon Simple Email Service
+- **Sendmail** - Local sendmail binary
+- **Log** - Write emails to log files (development only)
+
+## Basic Configuration
+
+### Mail Driver Selection
+
+```bash .env
+MAIL_MAILER=smtp
+```
+
+<ParamField path="MAIL_MAILER" type="string" default="smtp">
+  Mail driver to use. Options: `smtp`, `mailgun`, `postmark`, `ses`, `sendmail`, `log`
+</ParamField>
+
+### From Address
+
+```bash .env
+MAIL_FROM_ADDRESS=no-reply@example.com
+MAIL_FROM_NAME="Pterodactyl Panel"
+```
+
+<ParamField path="MAIL_FROM_ADDRESS" type="string" required>
+  Email address that appears as the sender.
+  
+  <Warning>
+    Use a valid email address from your domain to prevent emails from being marked as spam.
+  </Warning>
+</ParamField>
+
+<ParamField path="MAIL_FROM_NAME" type="string" default="Pterodactyl Panel">
+  Name that appears as the sender in email clients.
+</ParamField>
+
+## SMTP Configuration
+
+<CodeGroup>
+```bash Gmail
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=your-email@gmail.com
+MAIL_PASSWORD=your-app-password
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=your-email@gmail.com
+MAIL_FROM_NAME="Pterodactyl Panel"
+```
+
+```bash Generic SMTP
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.example.com
+MAIL_PORT=587
+MAIL_USERNAME=username
+MAIL_PASSWORD=password
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=no-reply@example.com
+MAIL_FROM_NAME="Pterodactyl Panel"
+```
+
+```bash Office 365
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.office365.com
+MAIL_PORT=587
+MAIL_USERNAME=your-email@outlook.com
+MAIL_PASSWORD=your-password
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=your-email@outlook.com
+MAIL_FROM_NAME="Pterodactyl Panel"
+```
+</CodeGroup>
+
+### SMTP Parameters
+
+<ParamField path="MAIL_HOST" type="string" required>
+  SMTP server hostname.
+</ParamField>
+
+<ParamField path="MAIL_PORT" type="integer" default="25">
+  SMTP server port. Common values:
+  - `25` - Standard SMTP (often blocked)
+  - `587` - SMTP with STARTTLS (recommended)
+  - `465` - SMTP over SSL
+</ParamField>
+
+<ParamField path="MAIL_USERNAME" type="string">
+  SMTP authentication username.
+</ParamField>
+
+<ParamField path="MAIL_PASSWORD" type="string">
+  SMTP authentication password.
+</ParamField>
+
+<ParamField path="MAIL_ENCRYPTION" type="string" default="tls">
+  Encryption method. Options: `tls`, `ssl`, or leave empty for none.
+</ParamField>
+
+### EHLO Domain
+
+```bash .env
+MAIL_EHLO_DOMAIN=panel.example.com
+```
+
+<ParamField path="MAIL_EHLO_DOMAIN" type="string">
+  Domain used in the SMTP EHLO/HELO command. Set this to your panel's domain to prevent mail servers like Gmail from rejecting your emails.
+  
+  <Info>
+    If not set, defaults to the server's hostname which may be 'localhost'.
+  </Info>
+</ParamField>
+
+## Mailgun Configuration
+
+<CodeGroup>
+```bash .env
+MAIL_MAILER=mailgun
+MAILGUN_DOMAIN=mg.example.com
+MAILGUN_SECRET=key-your-api-key
+MAILGUN_ENDPOINT=api.mailgun.net
+MAIL_FROM_ADDRESS=no-reply@mg.example.com
+MAIL_FROM_NAME="Pterodactyl Panel"
+```
+
+```bash EU Region
+MAIL_MAILER=mailgun
+MAILGUN_DOMAIN=mg.example.com
+MAILGUN_SECRET=key-your-api-key
+MAILGUN_ENDPOINT=api.eu.mailgun.net
+MAIL_FROM_ADDRESS=no-reply@mg.example.com
+MAIL_FROM_NAME="Pterodactyl Panel"
+```
+</CodeGroup>
+
+<Note>
+  You'll need to install the Mailgun PHP SDK:
+  ```bash
+  composer require mailgun/mailgun-php symfony/http-client nyholm/psr7
+  ```
+</Note>
+
+## Postmark Configuration
+
+```bash .env
+MAIL_MAILER=postmark
+POSTMARK_TOKEN=your-server-token
+MAIL_FROM_ADDRESS=no-reply@example.com
+MAIL_FROM_NAME="Pterodactyl Panel"
+```
+
+<Note>
+  You'll need to install the Postmark PHP SDK:
+  ```bash
+  composer require wildbit/swiftmailer-postmark
+  ```
+</Note>
+
+## Amazon SES Configuration
+
+```bash .env
+MAIL_MAILER=ses
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+AWS_DEFAULT_REGION=us-east-1
+MAIL_FROM_ADDRESS=no-reply@example.com
+MAIL_FROM_NAME="Pterodactyl Panel"
+```
+
+<Note>
+  You'll need to install the AWS SDK:
+  ```bash
+  composer require aws/aws-sdk-php
+  ```
+</Note>
+
+## Sendmail Configuration
+
+```bash .env
+MAIL_MAILER=sendmail
+MAIL_SENDMAIL_PATH="/usr/sbin/sendmail -bs -i"
+MAIL_FROM_ADDRESS=no-reply@example.com
+MAIL_FROM_NAME="Pterodactyl Panel"
+```
+
+<ParamField path="MAIL_SENDMAIL_PATH" type="string" default="/usr/sbin/sendmail -bs -i">
+  Path to the sendmail binary with arguments.
+</ParamField>
+
+## Testing Email Configuration
+
+After configuring email settings, test the connection:
+
+```bash
+php artisan p:environment:mail
+```
+
+This interactive command will:
+1. Prompt you for mail settings
+2. Send a test email
+3. Verify the configuration works
+
+### Manual Test
+
+You can also send a test email using Tinker:
+
+```bash
+php artisan tinker
+```
+
+```php
+Mail::raw('Test email from Pterodactyl Panel', function($message) {
+    $message->to('your-email@example.com')
+            ->subject('Test Email');
+});
+```
+
+## Troubleshooting
+
+### Emails Not Sending
+
+1. Check your mail logs:
+   ```bash
+   tail -f storage/logs/laravel-*.log
+   ```
+
+2. Verify queue workers are running (if using queues):
+   ```bash
+   php artisan queue:work --tries=3
+   ```
+
+3. Test SMTP connectivity:
+   ```bash
+   telnet smtp.example.com 587
+   ```
+
+### Common Issues
+
+<AccordionGroup>
+  <Accordion title="Connection Refused">
+    - Verify the SMTP host and port are correct
+    - Check if your firewall allows outbound connections on the SMTP port
+    - Ensure the SMTP service is running on the remote server
+  </Accordion>
+
+  <Accordion title="Authentication Failed">
+    - Double-check username and password
+    - For Gmail, use an [App Password](https://support.google.com/accounts/answer/185833) instead of your regular password
+    - Verify two-factor authentication settings
+  </Accordion>
+
+  <Accordion title="Emails Go to Spam">
+    - Set up SPF, DKIM, and DMARC records for your domain
+    - Use `MAIL_EHLO_DOMAIN` matching your panel's domain
+    - Ensure `MAIL_FROM_ADDRESS` uses your domain
+    - Consider using a dedicated email service (Mailgun, Postmark, SES)
+  </Accordion>
+
+  <Accordion title="SSL Certificate Verification Failed">
+    - Ensure your server has up-to-date CA certificates
+    - Update ca-certificates package: `apt-get update && apt-get install ca-certificates`
+    - For self-signed certificates, consider using `tls` instead of `ssl`
+  </Accordion>
+</AccordionGroup>
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use TLS Encryption" icon="lock">
+    Always use `MAIL_ENCRYPTION=tls` or `ssl` in production to encrypt email traffic.
+  </Card>
+  
+  <Card title="Dedicated Email Service" icon="envelope">
+    Consider using dedicated services like Mailgun or Postmark for better deliverability.
+  </Card>
+  
+  <Card title="Valid From Address" icon="at">
+    Use a real email address from your domain to improve deliverability and avoid spam filters.
+  </Card>
+  
+  <Card title="DNS Records" icon="globe">
+    Configure SPF, DKIM, and DMARC records to authenticate your emails.
+  </Card>
+</CardGroup>

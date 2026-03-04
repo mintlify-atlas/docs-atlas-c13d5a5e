@@ -1,0 +1,311 @@
+---
+title: Locations
+description: Manage geographic locations for nodes
+---
+
+The Locations API allows you to manage geographic or logical groupings for your nodes. Locations help organize nodes by datacenter, region, or any other grouping that makes sense for your deployment.
+
+## List Locations
+
+<CodeGroup>
+```bash cURL
+curl "https://panel.example.com/api/application/locations" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Retrieves a paginated list of all locations on the Panel.
+
+### Query Parameters
+
+<ParamField query="per_page" type="integer" default="50">
+  Number of results per page
+</ParamField>
+
+<ParamField query="filter[short]" type="string">
+  Filter locations by short identifier
+</ParamField>
+
+<ParamField query="filter[long]" type="string">
+  Filter locations by description
+</ParamField>
+
+<ParamField query="sort" type="string">
+  Sort by field. Available: `id`. Prefix with `-` for descending order
+</ParamField>
+
+<ParamField query="include" type="string">
+  Include related resources. Available: `nodes`, `servers`
+</ParamField>
+
+### Response
+
+<ResponseField name="object" type="string">
+  Always `list`
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of location objects
+  
+  <Expandable title="Location Object">
+    <ResponseField name="id" type="integer">
+      Internal location ID
+    </ResponseField>
+    
+    <ResponseField name="short" type="string">
+      Short identifier code (1-60 characters)
+    </ResponseField>
+    
+    <ResponseField name="long" type="string | null">
+      Full description of the location
+    </ResponseField>
+    
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp of creation
+    </ResponseField>
+    
+    <ResponseField name="updated_at" type="string">
+      ISO 8601 timestamp of last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "location",
+      "attributes": {
+        "id": 1,
+        "short": "us-west",
+        "long": "United States - West Coast",
+        "updated_at": "2024-01-01T00:00:00+00:00",
+        "created_at": "2024-01-01T00:00:00+00:00"
+      }
+    },
+    {
+      "object": "location",
+      "attributes": {
+        "id": 2,
+        "short": "eu-central",
+        "long": "Europe - Central",
+        "updated_at": "2024-01-15T00:00:00+00:00",
+        "created_at": "2024-01-15T00:00:00+00:00"
+      }
+    }
+  ],
+  "meta": {
+    "pagination": {
+      "total": 2,
+      "count": 2,
+      "per_page": 50,
+      "current_page": 1,
+      "total_pages": 1
+    }
+  }
+}
+```
+</ResponseExample>
+
+## Get Location Details
+
+<CodeGroup>
+```bash cURL
+curl "https://panel.example.com/api/application/locations/{location_id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Retrieves details for a specific location.
+
+### Path Parameters
+
+<ParamField path="location_id" type="integer" required>
+  The internal ID of the location
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="include" type="string">
+  Include related resources. Available: `nodes`, `servers`
+</ParamField>
+
+### Response
+
+<ResponseExample>
+```json
+{
+  "object": "location",
+  "attributes": {
+    "id": 1,
+    "short": "us-west",
+    "long": "United States - West Coast",
+    "updated_at": "2024-01-01T00:00:00+00:00",
+    "created_at": "2024-01-01T00:00:00+00:00"
+  }
+}
+```
+</ResponseExample>
+
+## Create Location
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://panel.example.com/api/application/locations" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "short": "us-east",
+    "long": "United States - East Coast"
+  }'
+```
+</CodeGroup>
+
+Creates a new location on the Panel.
+
+### Request Body
+
+<ParamField body="short" type="string" required>
+  Short identifier code for the location (1-60 characters, must be unique)
+</ParamField>
+
+<ParamField body="long" type="string">
+  Full description of the location (optional, max 191 characters)
+</ParamField>
+
+### Response
+
+Returns the created location object with HTTP status `201 Created`.
+
+<ResponseExample>
+```json
+{
+  "object": "location",
+  "attributes": {
+    "id": 3,
+    "short": "us-east",
+    "long": "United States - East Coast",
+    "updated_at": "2024-03-04T00:00:00+00:00",
+    "created_at": "2024-03-04T00:00:00+00:00"
+  },
+  "meta": {
+    "resource": "https://panel.example.com/api/application/locations/3"
+  }
+}
+```
+</ResponseExample>
+
+## Update Location
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH "https://panel.example.com/api/application/locations/{location_id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "short": "us-east-1",
+    "long": "United States - East Coast (Primary)"
+  }'
+```
+</CodeGroup>
+
+Updates an existing location.
+
+### Path Parameters
+
+<ParamField path="location_id" type="integer" required>
+  The internal ID of the location to update
+</ParamField>
+
+### Request Body
+
+All fields are optional. Only include fields you want to update.
+
+<ParamField body="short" type="string">
+  New short identifier code (must be unique)
+</ParamField>
+
+<ParamField body="long" type="string">
+  New description
+</ParamField>
+
+### Response
+
+Returns the updated location object.
+
+<ResponseExample>
+```json
+{
+  "object": "location",
+  "attributes": {
+    "id": 3,
+    "short": "us-east-1",
+    "long": "United States - East Coast (Primary)",
+    "updated_at": "2024-03-04T12:00:00+00:00",
+    "created_at": "2024-03-04T00:00:00+00:00"
+  }
+}
+```
+</ResponseExample>
+
+## Delete Location
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE "https://panel.example.com/api/application/locations/{location_id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Deletes a location from the Panel. The location must not have any nodes assigned to it.
+
+### Path Parameters
+
+<ParamField path="location_id" type="integer" required>
+  The internal ID of the location to delete
+</ParamField>
+
+### Response
+
+Returns HTTP status `204 No Content` on successful deletion.
+
+<Warning>
+A location cannot be deleted if it has any nodes assigned to it. Reassign or delete the nodes first.
+</Warning>
+
+## Usage Examples
+
+### Creating a Multi-Region Setup
+
+```bash
+# Create locations for different regions
+curl -X POST "https://panel.example.com/api/application/locations" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"short": "us-west", "long": "United States - West"}'
+
+curl -X POST "https://panel.example.com/api/application/locations" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"short": "eu-central", "long": "Europe - Central"}'
+
+curl -X POST "https://panel.example.com/api/application/locations" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"short": "ap-south", "long": "Asia Pacific - South"}'
+```
+
+### Listing Locations with Nodes
+
+```bash
+curl "https://panel.example.com/api/application/locations?include=nodes" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```

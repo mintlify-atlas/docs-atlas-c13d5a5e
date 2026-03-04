@@ -1,0 +1,165 @@
+---
+title: Environment Configuration
+description: Configure Pterodactyl Panel environment variables and .env settings
+---
+
+Pterodactyl Panel uses environment variables defined in the `.env` file for core configuration settings. This file is located in the root of your Panel installation.
+
+## Initial Setup
+
+During installation, copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+## Core Application Settings
+
+### Application Environment
+
+```bash .env
+APP_ENV=production
+APP_DEBUG=false
+```
+
+<ParamField path="APP_ENV" type="string" default="production">
+  Application environment. Use `production` for live deployments, `local` for development.
+</ParamField>
+
+<ParamField path="APP_DEBUG" type="boolean" default="false">
+  Enable debug mode. Shows detailed error messages with stack traces.
+  
+  <Warning>
+    **Never enable in production!** Debug mode exposes sensitive application details.
+  </Warning>
+</ParamField>
+
+### Application Identity
+
+```bash .env
+APP_NAME="Pterodactyl Panel"
+APP_URL=https://panel.example.com
+APP_LOCALE=en
+APP_TIMEZONE=UTC
+```
+
+<ParamField path="APP_NAME" type="string" default="Pterodactyl">
+  Application name used in emails and UI elements.
+</ParamField>
+
+<ParamField path="APP_URL" type="string" required>
+  The full URL where your Panel is accessible. Used for generating URLs in emails and console commands.
+  
+  Example: `https://panel.example.com`
+</ParamField>
+
+<ParamField path="APP_LOCALE" type="string" default="en">
+  Default language locale for the application.
+</ParamField>
+
+<ParamField path="APP_TIMEZONE" type="string" default="UTC">
+  Default timezone for the application. See [PHP timezones](https://www.php.net/manual/en/timezones.php).
+</ParamField>
+
+### Encryption Key
+
+```bash .env
+APP_KEY=base64:YOUR_32_CHARACTER_KEY_HERE
+```
+
+<ParamField path="APP_KEY" type="string" required>
+  Application encryption key. Generated during installation with `php artisan key:generate`.
+  
+  <Warning>
+    **Critical Security Setting!** Changing this key will invalidate all encrypted data including session cookies.
+  </Warning>
+</ParamField>
+
+### Theme Configuration
+
+```bash .env
+APP_THEME=pterodactyl
+```
+
+<ParamField path="APP_THEME" type="string" default="pterodactyl">
+  Active theme name. Custom themes should be placed in `resources/themes/`.
+</ParamField>
+
+## Security Settings
+
+### HashIDs Configuration
+
+HashIDs are used to obfuscate internal database IDs in public-facing URLs.
+
+```bash .env
+HASHIDS_SALT=random_salt_value
+HASHIDS_LENGTH=8
+```
+
+<ParamField path="HASHIDS_SALT" type="string" required>
+  Random salt for HashID generation. Should be a long, random string.
+  
+  <Warning>
+    Never change this value after installation as it will break all existing URLs.
+  </Warning>
+</ParamField>
+
+<ParamField path="HASHIDS_LENGTH" type="integer" default="8">
+  Minimum length of generated hash IDs.
+</ParamField>
+
+### Environment Restrictions
+
+```bash .env
+APP_ENVIRONMENT_ONLY=true
+```
+
+<ParamField path="APP_ENVIRONMENT_ONLY" type="boolean" default="true">
+  When enabled, only environment variables are used for configuration. Recommended for security.
+</ParamField>
+
+## Logging Configuration
+
+```bash .env
+LOG_CHANNEL=daily
+LOG_LEVEL=debug
+LOG_DEPRECATIONS_CHANNEL=null
+```
+
+<ParamField path="LOG_CHANNEL" type="string" default="daily">
+  Logging channel to use. Options:
+  - `daily` - Separate log file per day
+  - `single` - Single log file
+  - `stack` - Multiple channels
+</ParamField>
+
+<ParamField path="LOG_LEVEL" type="string" default="debug">
+  Minimum log level. Options: `debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency`
+</ParamField>
+
+## Generating the Application Key
+
+After creating your `.env` file, generate an encryption key:
+
+```bash
+php artisan key:generate --force
+```
+
+The `--force` flag is required in production environments.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Email Configuration" icon="envelope" href="/config/email">
+    Configure SMTP and email settings
+  </Card>
+  <Card title="Database Setup" icon="database" href="/config/database">
+    Configure MySQL/MariaDB connection
+  </Card>
+  <Card title="Cache & Queues" icon="bolt" href="/config/cache-queue">
+    Set up Redis, caching, and queue workers
+  </Card>
+  <Card title="Security Settings" icon="shield" href="/config/security">
+    Configure SSL, trusted proxies, and sessions
+  </Card>
+</CardGroup>

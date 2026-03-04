@@ -1,0 +1,381 @@
+---
+title: Schedules & Tasks
+description: Create and manage automated schedules with tasks
+---
+
+Schedules allow you to automate server tasks using cron-like scheduling. Each schedule can have multiple tasks that execute in sequence.
+
+## List Schedules
+
+Get all schedules for a server.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}/schedules" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+<ParamField path="server" type="string" required>
+  The server identifier
+</ParamField>
+
+### Response
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "server_schedule",
+      "attributes": {
+        "id": 1,
+        "name": "Daily Restart",
+        "cron": {
+          "day_of_week": "*",
+          "day_of_month": "*",
+          "month": "*",
+          "hour": "3",
+          "minute": "0"
+        },
+        "is_active": true,
+        "is_processing": false,
+        "only_when_online": false,
+        "last_run_at": "2024-01-15T03:00:00+00:00",
+        "next_run_at": "2024-01-16T03:00:00+00:00",
+        "created_at": "2024-01-01T10:00:00+00:00",
+        "updated_at": "2024-01-15T03:00:05+00:00",
+        "relationships": {
+          "tasks": {
+            "object": "list",
+            "data": [
+              {
+                "object": "schedule_task",
+                "attributes": {
+                  "id": 1,
+                  "sequence_id": 1,
+                  "action": "command",
+                  "payload": "say Server restarting in 30 seconds!",
+                  "time_offset": 0,
+                  "is_queued": false,
+                  "continue_on_failure": false,
+                  "created_at": "2024-01-01T10:00:00+00:00",
+                  "updated_at": "2024-01-01T10:00:00+00:00"
+                }
+              },
+              {
+                "object": "schedule_task",
+                "attributes": {
+                  "id": 2,
+                  "sequence_id": 2,
+                  "action": "power",
+                  "payload": "restart",
+                  "time_offset": 30,
+                  "is_queued": false,
+                  "continue_on_failure": false,
+                  "created_at": "2024-01-01T10:00:00+00:00",
+                  "updated_at": "2024-01-01T10:00:00+00:00"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+<ResponseField name="id" type="integer">
+  Schedule identifier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Schedule name
+</ResponseField>
+
+<ResponseField name="cron" type="object">
+  Cron expression components (each can be `*` for "every" or specific values)
+</ResponseField>
+
+<ResponseField name="is_active" type="boolean">
+  Whether the schedule is enabled
+</ResponseField>
+
+<ResponseField name="is_processing" type="boolean">
+  Whether the schedule is currently executing
+</ResponseField>
+
+<ResponseField name="only_when_online" type="boolean">
+  Only run if the server is online
+</ResponseField>
+
+<ResponseField name="last_run_at" type="string">
+  ISO 8601 timestamp of last execution
+</ResponseField>
+
+<ResponseField name="next_run_at" type="string">
+  ISO 8601 timestamp of next scheduled execution
+</ResponseField>
+
+## Create Schedule
+
+Create a new schedule.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/schedules" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Nightly Backup",
+    "minute": "0",
+    "hour": "2",
+    "day_of_month": "*",
+    "month": "*",
+    "day_of_week": "*",
+    "is_active": true,
+    "only_when_online": false
+  }'
+```
+
+<ParamField body="name" type="string" required>
+  Schedule name
+</ParamField>
+
+<ParamField body="minute" type="string" required>
+  Cron minute field (0-59 or `*`)
+</ParamField>
+
+<ParamField body="hour" type="string" required>
+  Cron hour field (0-23 or `*`)
+</ParamField>
+
+<ParamField body="day_of_month" type="string" required>
+  Cron day of month field (1-31 or `*`)
+</ParamField>
+
+<ParamField body="month" type="string" required>
+  Cron month field (1-12 or `*`)
+</ParamField>
+
+<ParamField body="day_of_week" type="string" required>
+  Cron day of week field (0-6 or `*`, where 0 = Sunday)
+</ParamField>
+
+<ParamField body="is_active" type="boolean">
+  Enable the schedule immediately (default: true)
+</ParamField>
+
+<ParamField body="only_when_online" type="boolean">
+  Only execute if server is online (default: false)
+</ParamField>
+
+### Cron Expression Examples
+
+- Every day at 3 AM: `0 3 * * *`
+- Every hour: `0 * * * *`
+- Every 30 minutes: `*/30 * * * *`
+- Every Monday at noon: `0 12 * * 1`
+- First day of month at midnight: `0 0 1 * *`
+
+### Response
+
+Returns the created schedule object (same format as list response).
+
+## Get Schedule
+
+Get details of a specific schedule.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}/schedules/{schedule}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+<ParamField path="schedule" type="integer" required>
+  The schedule ID
+</ParamField>
+
+## Update Schedule
+
+Update an existing schedule.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/schedules/{schedule}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Daily Restart (Updated)",
+    "minute": "0",
+    "hour": "4",
+    "day_of_month": "*",
+    "month": "*",
+    "day_of_week": "*",
+    "is_active": true,
+    "only_when_online": false
+  }'
+```
+
+All parameters are the same as create.
+
+## Execute Schedule Now
+
+Manually trigger a schedule immediately.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/schedules/{schedule}/execute" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+### Response
+
+Returns `202 Accepted` when execution begins.
+
+## Delete Schedule
+
+Delete a schedule and all its tasks.
+
+```bash
+curl -X DELETE "https://panel.example.com/api/client/servers/{server}/schedules/{schedule}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+### Response
+
+Returns `204 No Content` on success.
+
+## Schedule Tasks
+
+Tasks are actions that execute as part of a schedule. They run in sequence based on `sequence_id`.
+
+### Create Task
+
+Add a task to a schedule.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/schedules/{schedule}/tasks" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "command",
+    "payload": "say Backup starting!",
+    "time_offset": 0,
+    "continue_on_failure": false
+  }'
+```
+
+<ParamField body="action" type="string" required>
+  Task action type:
+  - `command` - Send console command
+  - `power` - Change power state
+  - `backup` - Create backup
+</ParamField>
+
+<ParamField body="payload" type="string" required>
+  Action-specific payload:
+  - For `command`: The command to execute
+  - For `power`: `start`, `stop`, `restart`, or `kill`
+  - For `backup`: Empty string or ignored
+</ParamField>
+
+<ParamField body="time_offset" type="integer" required>
+  Seconds to wait after previous task (0-900)
+</ParamField>
+
+<ParamField body="continue_on_failure" type="boolean">
+  Continue to next task if this one fails (default: false)
+</ParamField>
+
+### Update Task
+
+Update an existing task.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/schedules/{schedule}/tasks/{task}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "command",
+    "payload": "say Backup complete!",
+    "time_offset": 60,
+    "continue_on_failure": true
+  }'
+```
+
+<ParamField path="task" type="integer" required>
+  The task ID
+</ParamField>
+
+All parameters are the same as create.
+
+### Delete Task
+
+Remove a task from a schedule.
+
+```bash
+curl -X DELETE "https://panel.example.com/api/client/servers/{server}/schedules/{schedule}/tasks/{task}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+### Response
+
+Returns `204 No Content` on success.
+
+## Example: Complete Backup Schedule
+
+Here's how to create a complete backup schedule with multiple tasks:
+
+```bash
+# 1. Create the schedule (runs at 2 AM daily)
+SCHEDULE_ID=$(curl -X POST "https://panel.example.com/api/client/servers/{server}/schedules" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Nightly Backup",
+    "minute": "0",
+    "hour": "2",
+    "day_of_month": "*",
+    "month": "*",
+    "day_of_week": "*",
+    "is_active": true,
+    "only_when_online": false
+  }' | jq -r '.attributes.id')
+
+# 2. Add task: Announce backup
+curl -X POST "https://panel.example.com/api/client/servers/{server}/schedules/$SCHEDULE_ID/tasks" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "command",
+    "payload": "say Creating backup...",
+    "time_offset": 0
+  }'
+
+# 3. Add task: Create backup (30 seconds later)
+curl -X POST "https://panel.example.com/api/client/servers/{server}/schedules/$SCHEDULE_ID/tasks" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "backup",
+    "payload": "",
+    "time_offset": 30
+  }'
+
+# 4. Add task: Announce completion (5 minutes later)
+curl -X POST "https://panel.example.com/api/client/servers/{server}/schedules/$SCHEDULE_ID/tasks" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "command",
+    "payload": "say Backup complete!",
+    "time_offset": 300,
+    "continue_on_failure": true
+  }'
+```

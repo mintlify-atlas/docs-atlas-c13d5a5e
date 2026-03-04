@@ -1,0 +1,963 @@
+---
+title: 'Installation'
+description: 'Complete guide to installing Pterodactyl Panel and Wings daemon'
+---
+
+# Installation Guide
+
+This guide will walk you through installing Pterodactyl Panel and the Wings daemon. Follow each step carefully to ensure a successful installation.
+
+<Warning>
+This installation assumes you have a fresh server meeting all [system requirements](/system-requirements). Installing on an existing server with other applications may cause conflicts.
+</Warning>
+
+## Overview
+
+Pterodactyl installation consists of three main components:
+
+<Steps>
+  <Step title="Panel Installation">
+    Install the web interface and management system
+  </Step>
+  <Step title="Wings Installation">
+    Install the server control daemon on game server nodes
+  </Step>
+  <Step title="Configuration">
+    Connect Wings to the Panel and configure your first server
+  </Step>
+</Steps>
+
+## Prerequisites
+
+Before beginning, ensure you have:
+
+- [ ] A server meeting [system requirements](/system-requirements)
+- [ ] Root or sudo access to the server
+- [ ] A domain name pointing to your server IP
+- [ ] Basic knowledge of Linux command line
+
+<Tip>
+It's recommended to run the Panel and Wings on separate servers in production. However, they can be installed on the same machine for testing.
+</Tip>
+
+## Part 1: Panel Installation
+
+### Step 1: Install Dependencies
+
+First, update your system and install required dependencies.
+
+<CodeGroup>
+```bash Ubuntu/Debian
+# Update system
+apt update && apt upgrade -y
+
+# Install dependencies
+apt install -y software-properties-common curl apt-transport-https ca-certificates gnupg
+
+# Add PHP repository
+LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php
+apt update
+
+# Install PHP and extensions
+apt install -y php8.2 php8.2-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip}
+
+# Install MariaDB
+apt install -y mariadb-server
+
+# Install NGINX
+apt install -y nginx
+
+# Install Redis
+apt install -y redis-server
+
+# Start and enable services
+systemctl enable --now mariadb
+systemctl enable --now redis-server
+```
+
+```bash CentOS/Rocky/Alma
+# Update system
+dnf update -y
+
+# Install EPEL and REMI repositories
+dnf install -y epel-release
+dnf install -y http://rpms.remirepo.net/enterprise/remi-release-$(rpm -E %rhel).rpm
+
+# Enable PHP 8.2
+dnf module reset php -y
+dnf module enable php:remi-8.2 -y
+
+# Install PHP and extensions
+dnf install -y php php-{common,fpm,cli,json,mysqlnd,gd,mbstring,pdo,zip,bcmath,dom,opcache,posix}
+
+# Install MariaDB
+dnf install -y mariadb-server
+
+# Install NGINX
+dnf install -y nginx
+
+# Install Redis
+dnf install -y redis
+
+# Start and enable services
+systemctl enable --now mariadb
+systemctl enable --now redis
+systemctl enable --now php-fpm
+```
+</CodeGroup>
+
+### Step 2: Install Composer
+
+Composer is required to install PHP dependencies.
+
+```bash
+curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+```
+
+Verify installation:
+
+```bash
+composer --version
+```
+
+### Step 3: Download Panel Files
+
+Create the directory for the Panel and download the files.
+
+```bash
+# Create directory
+mkdir -p /var/www/pterodactyl
+cd /var/www/pterodactyl
+
+# Download Panel
+curl -Lo panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz
+tar -xzvf panel.tar.gz
+chmod -R 755 storage/* bootstrap/cache/
+```
+
+### Step 4: Configure Database
+
+Secure your MySQL installation and create the Panel database.
+
+```bash
+# Run MySQL secure installation
+mysql_secure_installation
+```
+
+<Note>
+When prompted, set a strong root password and answer 'Y' to all security questions.
+</Note>
+
+Now create the Panel database and user:
+
+```bash
+mysql -u root -p
+```
+
+```sql
+CREATE DATABASE panel;
+CREATE USER 'pterodactyl'@'127.0.0.1' IDENTIFIED BY 'yourStrongPassword';
+GRANT ALL PRIVILEGES ON panel.* TO 'pterodactyl'@'127.0.0.1' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+exit;
+```
+
+<Warning>
+Replace `yourStrongPassword` with a secure password. **Never use the root MySQL user for the Panel.**
+</Warning>
+
+### Step 5: Install Panel Dependencies
+
+Install PHP dependencies using Composer.
+
+```bash
+cd /var/www/pterodactyl
+composer install --no-dev --optimize-autoloader
+```
+
+<Note>
+This process may take several minutes depending on your server's speed.
+</Note>
+
+### Step 6: Environment Configuration
+
+Generate the environment file and application key.
+
+```bash
+# Copy environment file
+cp .env.example .env
+
+# Generate application key
+php artisan key:generate --force
+```
+
+Now configure the environment:
+
+```bash
+php artisan p:environment:setup
+```
+
+You'll be prompted to enter:
+
+- **Author Email**: Your email address for Let's Encrypt
+- **Application URL**: Your Panel URL (e.g., `https://panel.example.com`)
+- **Timezone**: Your timezone (e.g., `America/New_York`)
+- **Cache Driver**: Select `redis` (recommended)
+- **Session Driver**: Select `redis` (recommended)
+- **Queue Driver**: Select `redis` (recommended)
+
+Next, configure database settings:
+
+```bash
+php artisan p:environment:database
+```
+
+Enter the database credentials:
+
+- **Database Host**: `127.0.0.1`
+- **Database Port**: `3306`
+- **Database Name**: `panel`
+- **Username**: `pterodactyl`
+- **Password**: The password you set earlier
+
+### Step 7: Database Setup
+
+Run database migrations to set up the Panel schema.
+
+```bash
+php artisan migrate --seed --force
+```
+
+### Step 8: Create Admin User
+
+Create your first administrator account.
+
+```bash
+php artisan p:user:make
+```
+
+Enter:
+
+- **Email**: Your email address
+- **Username**: Your username
+- **First Name**: Your first name
+- **Last Name**: Your last name
+- **Password**: A strong password
+- **Admin**: `yes`
+
+### Step 9: Set Permissions
+
+Set the correct ownership and permissions.
+
+<CodeGroup>
+```bash NGINX
+chown -R www-data:www-data /var/www/pterodactyl/*
+```
+
+```bash Apache
+chown -R apache:apache /var/www/pterodactyl/*
+# Or on some systems:
+chown -R www-data:www-data /var/www/pterodactyl/*
+```
+</CodeGroup>
+
+### Step 10: Configure Queue Worker
+
+Create a systemd service for the queue worker.
+
+```bash
+nano /etc/systemd/system/pteroq.service
+```
+
+Paste the following:
+
+```ini
+[Unit]
+Description=Pterodactyl Queue Worker
+After=redis-server.service
+
+[Service]
+User=www-data
+Group=www-data
+Restart=always
+ExecStart=/usr/bin/php /var/www/pterodactyl/artisan queue:work --queue=high,standard,low --sleep=3 --tries=3
+StartLimitInterval=180
+StartLimitBurst=30
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start the service:
+
+```bash
+systemctl enable --now pteroq.service
+```
+
+### Step 11: Configure Cron Job
+
+Add a cron job for scheduled tasks.
+
+```bash
+crontab -e
+```
+
+Add this line:
+
+```cron
+* * * * * php /var/www/pterodactyl/artisan schedule:run >> /dev/null 2>&1
+```
+
+### Step 12: Configure Web Server
+
+Configure NGINX or Apache to serve the Panel.
+
+<Tabs>
+  <Tab title="NGINX">
+    Remove the default configuration:
+    
+    ```bash
+    rm /etc/nginx/sites-enabled/default
+    ```
+    
+    Create the Panel configuration:
+    
+    ```bash
+    nano /etc/nginx/sites-available/pterodactyl.conf
+    ```
+    
+    Paste the following (replace `panel.example.com` with your domain):
+    
+    ```nginx
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name panel.example.com;
+        return 301 https://$server_name$request_uri;
+    }
+    
+    server {
+        listen 443 ssl http2;
+        listen [::]:443 ssl http2;
+        server_name panel.example.com;
+    
+        root /var/www/pterodactyl/public;
+        index index.php;
+    
+        access_log /var/log/nginx/pterodactyl.app-access.log;
+        error_log  /var/log/nginx/pterodactyl.app-error.log error;
+    
+        # SSL Configuration - Replace with your certificates
+        ssl_certificate /etc/letsencrypt/live/panel.example.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/panel.example.com/privkey.pem;
+        ssl_session_cache shared:SSL:10m;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384";
+        ssl_prefer_server_ciphers on;
+    
+        add_header X-Content-Type-Options nosniff;
+        add_header X-XSS-Protection "1; mode=block";
+        add_header X-Robots-Tag none;
+        add_header Content-Security-Policy "frame-ancestors 'self'";
+        add_header X-Frame-Options DENY;
+        add_header Referrer-Policy same-origin;
+    
+        location / {
+            try_files $uri $uri/ /index.php?$query_string;
+        }
+    
+        location ~ \.php$ {
+            fastcgi_split_path_info ^(.+\.php)(/.+)$;
+            fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+            fastcgi_index index.php;
+            include fastcgi_params;
+            fastcgi_param PHP_VALUE "upload_max_filesize = 100M \n post_max_size=100M";
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            fastcgi_param HTTP_PROXY "";
+            fastcgi_intercept_errors off;
+            fastcgi_buffer_size 16k;
+            fastcgi_buffers 4 16k;
+            fastcgi_connect_timeout 300;
+            fastcgi_send_timeout 300;
+            fastcgi_read_timeout 300;
+            include /etc/nginx/fastcgi_params;
+        }
+    
+        location ~ /\.ht {
+            deny all;
+        }
+    }
+    ```
+    
+    Enable the configuration:
+    
+    ```bash
+    ln -s /etc/nginx/sites-available/pterodactyl.conf /etc/nginx/sites-enabled/pterodactyl.conf
+    ```
+    
+    Test and restart NGINX:
+    
+    ```bash
+    nginx -t
+    systemctl restart nginx
+    ```
+  </Tab>
+  <Tab title="Apache">
+    Create the Panel configuration:
+    
+    ```bash
+    nano /etc/apache2/sites-available/pterodactyl.conf
+    ```
+    
+    Paste the following (replace `panel.example.com`):
+    
+    ```apache
+    <VirtualHost *:80>
+      ServerName panel.example.com
+      RewriteEngine On
+      RewriteCond %{HTTPS} !=on
+      RewriteRule ^/?(.*) https://%{SERVER_NAME}/$1 [R,L]
+    </VirtualHost>
+    
+    <VirtualHost *:443>
+      ServerName panel.example.com
+      DocumentRoot "/var/www/pterodactyl/public"
+      
+      AllowEncodedSlashes On
+      
+      php_value upload_max_filesize 100M
+      php_value post_max_size 100M
+      
+      <Directory "/var/www/pterodactyl/public">
+        Require all granted
+        AllowOverride all
+      </Directory>
+      
+      SSLEngine on
+      SSLCertificateFile /etc/letsencrypt/live/panel.example.com/fullchain.pem
+      SSLCertificateKeyFile /etc/letsencrypt/live/panel.example.com/privkey.pem
+    </VirtualHost>
+    ```
+    
+    Enable required modules and site:
+    
+    ```bash
+    a2enmod rewrite
+    a2enmod ssl
+    a2ensite pterodactyl.conf
+    systemctl restart apache2
+    ```
+  </Tab>
+</Tabs>
+
+### Step 13: Install SSL Certificate
+
+Install Certbot and obtain an SSL certificate.
+
+<CodeGroup>
+```bash Ubuntu/Debian
+apt install -y certbot
+# For NGINX:
+apt install -y python3-certbot-nginx
+# For Apache:
+apt install -y python3-certbot-apache
+```
+
+```bash CentOS/Rocky/Alma
+dnf install -y certbot
+# For NGINX:
+dnf install -y python3-certbot-nginx
+# For Apache:
+dnf install -y python3-certbot-apache
+```
+</CodeGroup>
+
+Obtain the certificate:
+
+<CodeGroup>
+```bash NGINX
+certbot --nginx -d panel.example.com
+```
+
+```bash Apache
+certbot --apache -d panel.example.com
+```
+</CodeGroup>
+
+<Note>
+Certbot will automatically configure SSL and set up auto-renewal.
+</Note>
+
+### Panel Installation Complete!
+
+You should now be able to access your Panel at `https://panel.example.com`. Log in with the admin account you created.
+
+## Part 2: Wings Installation
+
+Wings must be installed on every server where you want to run game servers. This can be the same server as the Panel or separate machines.
+
+### Step 1: Install Docker
+
+Install Docker on your Wings node.
+
+```bash
+curl -sSL https://get.docker.com/ | CHANNEL=stable bash
+systemctl enable --now docker
+```
+
+Verify Docker is running:
+
+```bash
+docker --version
+```
+
+### Step 2: Enable Swap (Optional but Recommended)
+
+Enable swap to prevent out-of-memory issues.
+
+```bash
+# Check if swap exists
+swapon --show
+
+# If no swap, create a 2GB swap file
+fallocate -l 2G /swapfile
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+
+# Make it permanent
+echo '/swapfile none swap sw 0 0' | tee -a /etc/fstab
+```
+
+### Step 3: Download Wings
+
+Download the Wings binary.
+
+```bash
+mkdir -p /etc/pterodactyl
+curl -L -o /usr/local/bin/wings "https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_$([[ "$(uname -m)" == "x86_64" ]] && echo "amd64" || echo "arm64")"
+chmod u+x /usr/local/bin/wings
+```
+
+### Step 4: Create Node in Panel
+
+Before configuring Wings, you need to create a node in the Panel.
+
+<Steps>
+  <Step title="Access Admin Panel">
+    Log in to your Panel and navigate to the Admin area
+  </Step>
+  <Step title="Create Location">
+    Go to **Locations** → **Create New** and create a location (e.g., "US East")
+  </Step>
+  <Step title="Create Node">
+    Go to **Nodes** → **Create New** and fill in:
+    - **Name**: A descriptive name (e.g., "Node-1")
+    - **Location**: Select the location you created
+    - **FQDN**: Your node's domain or IP (e.g., `node1.example.com`)
+    - **Communicate Over SSL**: Enable if using HTTPS
+    - **Behind Proxy**: Enable if behind a proxy
+    - **Memory**: Total RAM to allocate to servers
+    - **Disk Space**: Total disk space to allocate
+  </Step>
+  <Step title="Get Configuration">
+    After creating the node, go to the **Configuration** tab and copy the configuration file
+  </Step>
+</Steps>
+
+### Step 5: Configure Wings
+
+Create the Wings configuration file.
+
+```bash
+nano /etc/pterodactyl/config.yml
+```
+
+Paste the configuration from the Panel (Step 4). It should look similar to:
+
+```yaml
+debug: false
+uuid: your-node-uuid
+token_id: your-token-id
+token: your-token
+api:
+  host: 0.0.0.0
+  port: 8080
+  ssl:
+    enabled: false
+    cert: /etc/letsencrypt/live/node1.example.com/fullchain.pem
+    key: /etc/letsencrypt/live/node1.example.com/privkey.pem
+system:
+  root_directory: /var/lib/pterodactyl/volumes
+  log_directory: /var/log/pterodactyl
+  data: /var/lib/pterodactyl
+  sftp:
+    bind_port: 2022
+allowed_mounts: []
+remote: 'https://panel.example.com'
+```
+
+<Warning>
+Ensure the `remote` URL points to your Panel URL and matches exactly (including https:// and no trailing slash).
+</Warning>
+
+### Step 6: Create Wings Service
+
+Create a systemd service for Wings.
+
+```bash
+nano /etc/systemd/system/wings.service
+```
+
+Paste:
+
+```ini
+[Unit]
+Description=Pterodactyl Wings Daemon
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+User=root
+WorkingDirectory=/etc/pterodactyl
+LimitNOFILE=4096
+PIDFile=/var/run/wings/daemon.pid
+ExecStart=/usr/local/bin/wings
+Restart=on-failure
+StartLimitInterval=180
+StartLimitBurst=30
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start Wings:
+
+```bash
+systemctl enable --now wings
+```
+
+Check status:
+
+```bash
+systemctl status wings
+```
+
+### Step 7: Configure Firewall
+
+Open necessary ports for Wings.
+
+<CodeGroup>
+```bash UFW
+# Wings API (for Panel communication)
+ufw allow 8080/tcp
+
+# SFTP
+ufw allow 2022/tcp
+
+# Game server ports (adjust range as needed)
+ufw allow 25565:25665/tcp
+ufw allow 25565:25665/udp
+
+# Enable firewall
+ufw enable
+```
+
+```bash firewalld
+# Wings API
+firewall-cmd --add-port=8080/tcp --permanent
+
+# SFTP
+firewall-cmd --add-port=2022/tcp --permanent
+
+# Game server ports
+firewall-cmd --add-port=25565-25665/tcp --permanent
+firewall-cmd --add-port=25565-25665/udp --permanent
+
+# Reload
+firewall-cmd --reload
+```
+</CodeGroup>
+
+### Step 8: Verify Connection
+
+In your Panel, navigate to **Admin** → **Nodes** and check if the node shows as online with a green heart icon.
+
+<Tip>
+If the node appears offline, check:
+- Wings service is running: `systemctl status wings`
+- Firewall allows port 8080
+- The `remote` URL in config.yml is correct
+- Wings logs: `journalctl -u wings -n 50`
+</Tip>
+
+## Part 3: Creating Your First Server
+
+Now that both Panel and Wings are installed, create your first game server.
+
+### Step 1: Import Eggs
+
+Eggs are server templates. Import default eggs:
+
+<Steps>
+  <Step title="Download Eggs">
+    Visit [pterodactyl-eggs repository](https://github.com/parkervcp/eggs) and download eggs for your desired games
+  </Step>
+  <Step title="Import to Panel">
+    Go to **Admin** → **Nests** → Select a nest → **Import Egg** and upload the JSON file
+  </Step>
+</Steps>
+
+<Note>
+The Panel comes with some default eggs, but the community repository has many more options.
+</Note>
+
+### Step 2: Create Allocations
+
+Allocations are IP:Port combinations for game servers.
+
+1. Go to **Admin** → **Nodes** → Select your node → **Allocation**
+2. Enter:
+   - **IP Address**: Your server's IP
+   - **Ports**: Port range (e.g., `25565-25665`)
+3. Click **Submit**
+
+### Step 3: Create Server
+
+<Steps>
+  <Step title="Navigate to Servers">
+    Go to **Admin** → **Servers** → **Create New**
+  </Step>
+  <Step title="Core Details">
+    - **Server Name**: Name your server
+    - **Server Owner**: Select a user
+    - **Description**: Optional description
+  </Step>
+  <Step title="Allocation">
+    - **Node**: Select your node
+    - **Default Allocation**: Select an available allocation
+  </Step>
+  <Step title="Application Feature Limits">
+    Configure database and backup limits
+  </Step>
+  <Step title="Resource Management">
+    - **Memory**: Allocated RAM (MB)
+    - **Disk Space**: Allocated disk (MB)
+    - **CPU Limit**: CPU percentage (100 = 1 core)
+  </Step>
+  <Step title="Nest Configuration">
+    - **Nest**: Select game category (e.g., Minecraft)
+    - **Egg**: Select server type (e.g., Paper)
+    - **Docker Image**: Default is usually fine
+    - **Startup Command**: Customize if needed
+  </Step>
+  <Step title="Create Server">
+    Click **Create Server** and wait for installation
+  </Step>
+</Steps>
+
+### Step 4: Access Server
+
+Once created, access your server:
+
+1. Go to the client area (not admin)
+2. Click on your server
+3. Use the console to start/stop and manage your server
+
+## Troubleshooting
+
+### Panel Issues
+
+<AccordionGroup>
+  <Accordion title="500 Error - Missing manifest.json">
+    This occurs when assets aren't built. If using pre-built releases, ensure you extracted all files correctly.
+    
+    For development:
+    ```bash
+    cd /var/www/pterodactyl
+    yarn install
+    yarn build:production
+    ```
+  </Accordion>
+  
+  <Accordion title="Queue worker not processing jobs">
+    Check the queue worker status:
+    ```bash
+    systemctl status pteroq
+    ```
+    
+    View logs:
+    ```bash
+    journalctl -u pteroq -n 100
+    ```
+  </Accordion>
+  
+  <Accordion title="Can't connect to database">
+    Verify database credentials in `/var/www/pterodactyl/.env`
+    
+    Test connection:
+    ```bash
+    mysql -u pterodactyl -p panel
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Wings Issues
+
+<AccordionGroup>
+  <Accordion title="Node appears offline">
+    Check Wings status:
+    ```bash
+    systemctl status wings
+    ```
+    
+    View logs:
+    ```bash
+    journalctl -u wings -n 100
+    ```
+    
+    Verify:
+    - Port 8080 is accessible from Panel
+    - SSL configuration matches Panel settings
+    - `remote` URL in config.yml is correct
+  </Accordion>
+  
+  <Accordion title="Server installation fails">
+    Check Wings logs:
+    ```bash
+    tail -f /var/log/pterodactyl/wings.log
+    ```
+    
+    Verify:
+    - Docker is running: `systemctl status docker`
+    - Disk space available: `df -h`
+    - Permissions on `/var/lib/pterodactyl`
+  </Accordion>
+  
+  <Accordion title="Can't connect to SFTP">
+    Verify:
+    - Wings is running
+    - Port 2022 is open in firewall
+    - Using Panel username and password
+    - SFTP address is `node_address:2022`
+  </Accordion>
+</AccordionGroup>
+
+## Post-Installation
+
+### Security Hardening
+
+<Steps>
+  <Step title="Enable 2FA">
+    Enable Two-Factor Authentication for all admin accounts
+  </Step>
+  <Step title="Configure Firewall">
+    Ensure only necessary ports are open
+  </Step>
+  <Step title="Regular Updates">
+    Keep Panel, Wings, and system packages updated
+  </Step>
+  <Step title="Backup Strategy">
+    Configure automated backups for database and server files
+  </Step>
+</Steps>
+
+### Optimization
+
+- Configure Redis for better performance
+- Set up queue workers for background processing
+- Enable OPcache for PHP performance
+- Consider CDN for static assets (large installations)
+- Monitor resource usage and scale as needed
+
+## Updating
+
+To update Pterodactyl:
+
+<Tabs>
+  <Tab title="Panel Update">
+    ```bash
+    cd /var/www/pterodactyl
+    
+    # Enter maintenance mode
+    php artisan down
+    
+    # Download update
+    curl -L -o panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz
+    tar -xzvf panel.tar.gz
+    
+    # Update dependencies
+    composer install --no-dev --optimize-autoloader
+    
+    # Clear caches
+    php artisan view:clear
+    php artisan config:clear
+    
+    # Run migrations
+    php artisan migrate --seed --force
+    
+    # Set permissions
+    chown -R www-data:www-data /var/www/pterodactyl/*
+    
+    # Exit maintenance mode
+    php artisan up
+    
+    # Restart queue worker
+    systemctl restart pteroq
+    ```
+  </Tab>
+  <Tab title="Wings Update">
+    ```bash
+    # Stop Wings
+    systemctl stop wings
+    
+    # Download latest Wings
+    curl -L -o /usr/local/bin/wings "https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_$([[ "$(uname -m)" == "x86_64" ]] && echo "amd64" || echo "arm64")"
+    chmod u+x /usr/local/bin/wings
+    
+    # Start Wings
+    systemctl start wings
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+Always backup your database and configuration files before updating!
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Official Documentation" icon="book" href="https://pterodactyl.io/panel/1.0/getting_started.html">
+    Read the complete documentation for advanced configuration
+  </Card>
+  <Card title="Community Discord" icon="discord" href="https://discord.gg/pterodactyl">
+    Join the community for support and discussions
+  </Card>
+  <Card title="API Documentation" icon="code" href="https://pterodactyl.io/api/">
+    Learn how to integrate with the Pterodactyl API
+  </Card>
+  <Card title="Community Eggs" icon="egg" href="https://github.com/parkervcp/eggs">
+    Browse hundreds of community-maintained server eggs
+  </Card>
+</CardGroup>
+
+## Support
+
+If you encounter issues:
+
+1. Check the [official documentation](https://pterodactyl.io)
+2. Search existing [GitHub issues](https://github.com/pterodactyl/panel/issues)
+3. Join the [Discord server](https://discord.gg/pterodactyl) for community help
+4. Review logs for error messages
+
+<Tip>
+When asking for help, always provide:
+- Panel and Wings versions
+- Operating system and version
+- Error messages from logs
+- Steps to reproduce the issue
+</Tip>

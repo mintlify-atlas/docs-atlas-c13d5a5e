@@ -1,0 +1,355 @@
+---
+title: Server Console
+description: Web-based console for real-time server output and command execution
+---
+
+The server console provides a real-time interface to view your server's output and send commands directly to the running process. It connects via WebSocket for instant updates.
+
+## Accessing the Console
+
+The console is available on the main server dashboard. It displays:
+
+- **Real-time output** - Server logs, player messages, errors
+- **Command input** - Send commands to the running server
+- **Power controls** - Start, stop, restart, kill buttons
+- **Connection status** - WebSocket connection indicator
+
+### WebSocket Connection
+
+The console uses WebSocket for live communication:
+
+<Steps>
+  <Step title="Request Credentials">
+    Get WebSocket authentication token from the API:
+    
+    ```bash
+    GET /api/client/servers/{server}/websocket
+    ```
+    
+    ```json Response
+    {
+      "object": "websocket_credentials",
+      "attributes": {
+        "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+        "socket": "wss://node.example.com:8080/api/servers/7e8e8f18/ws"
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Connect to WebSocket">
+    Connect to the Wings daemon WebSocket endpoint:
+    
+    ```javascript
+    const ws = new WebSocket('wss://node.example.com:8080/api/servers/7e8e8f18/ws');
+    
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        event: 'auth',
+        args: [token]
+      }));
+    };
+    ```
+  </Step>
+  
+  <Step title="Receive Events">
+    Listen for server events:
+    
+    ```javascript
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      
+      switch (data.event) {
+        case 'console output':
+          console.log(data.args[0]); // Log line
+          break;
+        case 'status':
+          console.log('Server status:', data.args[0]); // running, offline, etc.
+          break;
+        case 'stats':
+          console.log('Resource stats:', data.args[0]);
+          break;
+      }
+    };
+    ```
+  </Step>
+</Steps>
+
+## Sending Commands
+
+Commands are sent through the Panel API (not directly via WebSocket):
+
+```bash Send Command
+POST /api/client/servers/{server}/command
+Content-Type: application/json
+
+{
+  "command": "say Hello from the panel!"
+}
+```
+
+```json Success Response
+HTTP/1.1 204 No Content
+```
+
+<Note>
+Requires the `control.console` permission. Server must be in a running state to accept commands.
+</Note>
+
+### Command Examples
+
+<CodeGroup>
+```bash Minecraft
+POST /api/client/servers/{server}/command
+
+{
+  "command": "say Server backup starting in 5 minutes!"
+}
+```
+
+```bash Source Engine
+POST /api/client/servers/{server}/command
+
+{
+  "command": "changelevel de_dust2"
+}
+```
+
+```bash ARK
+POST /api/client/servers/{server}/command
+
+{
+  "command": "SaveWorld"
+}
+```
+</CodeGroup>
+
+### Error Handling
+
+If the server is offline, you'll receive an error:
+
+```json Server Offline
+HTTP/1.1 502 Bad Gateway
+
+{
+  "errors": [
+    {
+      "code": "HttpException",
+      "status": "502",
+      "detail": "Server must be online in order to send commands."
+    }
+  ]
+}
+```
+
+## Power Controls
+
+Control your server's power state with these actions:
+
+### Start Server
+
+```bash
+POST /api/client/servers/{server}/power
+
+{
+  "signal": "start"
+}
+```
+
+Starts the server using the configured startup command. Requires `control.start` permission.
+
+### Stop Server
+
+```bash
+POST /api/client/servers/{server}/power
+
+{
+  "signal": "stop"
+}
+```
+
+Sends a graceful shutdown signal (SIGTERM). Requires `control.stop` permission.
+
+### Restart Server
+
+```bash
+POST /api/client/servers/{server}/power
+
+{
+  "signal": "restart"
+}
+```
+
+Stops and starts the server. Requires `control.restart` permission.
+
+### Kill Server
+
+```bash
+POST /api/client/servers/{server}/power
+
+{
+  "signal": "kill"
+}
+```
+
+<Warning>
+Force kills the server process (SIGKILL). Use only when the server is unresponsive. May cause data loss.
+</Warning>
+
+## Console Output Format
+
+Console lines are sent as WebSocket events:
+
+```json Console Output Event
+{
+  "event": "console output",
+  "args": [
+    "[Server thread/INFO]: Starting Minecraft server on *:25565"
+  ]
+}
+```
+
+Output includes:
+- Timestamps (added by the game server)
+- Log levels (INFO, WARN, ERROR)
+- Thread information
+- Actual message content
+
+### ANSI Color Codes
+
+Many servers output ANSI color codes. The panel console renders these:
+
+```
+[0m - Reset
+[31m - Red (errors)
+[33m - Yellow (warnings)
+[32m - Green (success)
+[36m - Cyan (info)
+```
+
+Example with colors:
+```bash
+[31m[ERROR][0m Failed to load plugin
+[33m[WARN][0m Deprecated API usage
+[32m[INFO][0m Server started successfully
+```
+
+## Status Events
+
+The WebSocket sends server status changes:
+
+```json Status Change
+{
+  "event": "status",
+  "args": ["running"]
+}
+```
+
+Possible statuses:
+- `offline` - Server is stopped
+- `starting` - Server is booting up
+- `running` - Server is online
+- `stopping` - Server is shutting down
+
+## Resource Statistics
+
+Real-time stats are pushed via WebSocket:
+
+```json Stats Event
+{
+  "event": "stats",
+  "args": [
+    {
+      "memory_bytes": 2147483648,
+      "memory_limit_bytes": 4294967296,
+      "cpu_absolute": 85.5,
+      "network": {
+        "rx_bytes": 1024000,
+        "tx_bytes": 512000
+      },
+      "disk_bytes": 5368709120,
+      "state": "running",
+      "uptime": 3600000
+    }
+  ]
+}
+```
+
+### Stats Breakdown
+
+- `memory_bytes` - Current RAM usage in bytes
+- `memory_limit_bytes` - Maximum allowed RAM
+- `cpu_absolute` - Current CPU usage percentage
+- `network.rx_bytes` - Total bytes received since start
+- `network.tx_bytes` - Total bytes transmitted
+- `disk_bytes` - Total disk space used
+- `uptime` - Server uptime in milliseconds
+
+## Activity Logging
+
+All console commands are logged:
+
+```json Activity Log Entry
+{
+  "event": "server:console.command",
+  "user": "admin@example.com",
+  "timestamp": "2025-01-15T10:30:00+00:00",
+  "properties": {
+    "command": "say Hello players!"
+  }
+}
+```
+
+<Note>
+Command execution is logged but the actual output is not stored - only visible in real-time via the console.
+</Note>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Keep Console Open During Critical Operations">
+    When performing updates, migrations, or troubleshooting, keep the console open to monitor for errors or warnings.
+  </Accordion>
+  
+  <Accordion title="Use Stop, Not Kill">
+    Always use the stop command for graceful shutdowns. This allows the server to save data properly. Only use kill for frozen servers.
+  </Accordion>
+  
+  <Accordion title="Monitor Resource Usage">
+    Watch the stats graphs for memory leaks or CPU spikes that could indicate problems with plugins or mods.
+  </Accordion>
+  
+  <Accordion title="WebSocket Reconnection">
+    Implement automatic reconnection logic in your client:
+    
+    ```javascript
+    ws.onclose = () => {
+      setTimeout(() => connectWebSocket(), 5000);
+    };
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Console Not Connecting">
+    - Check that Wings daemon is running on the node
+    - Verify WebSocket port (8080) is accessible
+    - Ensure valid authentication token
+    - Check browser console for connection errors
+  </Accordion>
+  
+  <Accordion title="Commands Not Executing">
+    - Verify server is in `running` state
+    - Check you have `control.console` permission
+    - Ensure command syntax is correct for your game
+    - Look for errors in panel logs
+  </Accordion>
+  
+  <Accordion title="Missing Console Output">
+    - Some servers buffer output - wait a few seconds
+    - Check if server writes to log files instead of stdout
+    - Verify Wings is properly capturing process output
+  </Accordion>
+</AccordionGroup>

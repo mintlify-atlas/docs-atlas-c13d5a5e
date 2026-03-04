@@ -1,0 +1,626 @@
+---
+title: 'Monitoring Wings'
+description: 'Monitor Wings performance, logs, and server health'
+---
+
+## Overview
+
+Effective monitoring helps you maintain healthy Wings nodes, identify performance issues, and troubleshoot problems before they impact users.
+
+## Wings Logs
+
+### Systemd Journal
+
+Wings logs are managed by systemd and accessible via `journalctl`:
+
+```bash
+# View all Wings logs
+journalctl -u wings
+
+# Follow logs in real-time
+journalctl -u wings -f
+
+# View last 100 lines
+journalctl -u wings -n 100
+
+# View logs since specific time
+journalctl -u wings --since "1 hour ago"
+journalctl -u wings --since "2024-03-04 10:00:00"
+
+# View logs with priority (error and above)
+journalctl -u wings -p err
+```
+
+### Log Levels
+
+Wings logs at different severity levels:
+
+- **debug**: Detailed information (only with `debug: true`)
+- **info**: General informational messages
+- **warning**: Warning messages (potential issues)
+- **error**: Error messages (actual problems)
+- **fatal**: Critical errors causing shutdown
+
+### Debug Mode
+
+Enable debug logging in `/etc/pterodactyl/config.yml`:
+
+```yaml
+debug: true
+```
+
+<Warning>
+Debug mode generates significant log output. Only enable for troubleshooting and disable in production.
+</Warning>
+
+Restart Wings to apply:
+
+```bash
+systemctl restart wings
+journalctl -u wings -f  # Watch debug logs
+```
+
+## Log Analysis
+
+### Common Log Patterns
+
+#### Successful Operations
+
+```bash
+# Server starts
+journalctl -u wings | grep "server entered running state"
+
+# Successful SFTP authentication
+journalctl -u wings | grep "sftp.*authenticated"
+
+# Backup completion
+journalctl -u wings | grep "backup.*completed"
+```
+
+#### Errors and Issues
+
+```bash
+# Authentication failures
+journalctl -u wings | grep -i "auth.*fail"
+
+# Docker errors
+journalctl -u wings | grep -i "docker.*error"
+
+# Resource limit errors
+journalctl -u wings | grep -i "oom\|memory"
+
+# Network errors
+journalctl -u wings | grep -i "connection.*refused\|timeout"
+```
+
+#### Performance Issues
+
+```bash
+# Slow operations
+journalctl -u wings | grep -i "slow\|timeout"
+
+# Throttling events
+journalctl -u wings | grep -i "throttle"
+
+# Container crashes
+journalctl -u wings | grep -i "container.*exit\|container.*died"
+```
+
+### Export Logs
+
+Export logs for analysis or support:
+
+```bash
+# Export last 1000 lines
+journalctl -u wings -n 1000 > wings.log
+
+# Export logs from specific timeframe
+journalctl -u wings --since "2024-03-04" --until "2024-03-05" > wings-march4.log
+
+# Export as JSON for parsing
+journalctl -u wings -o json > wings.json
+```
+
+## System Monitoring
+
+### Resource Usage
+
+#### Wings Process
+
+```bash
+# Wings memory and CPU usage
+ps aux | grep wings
+
+# Detailed process info
+top -p $(pgrep wings)
+
+# Resource limits
+cat /proc/$(pgrep wings)/limits
+```
+
+#### System Resources
+
+```bash
+# CPU usage
+mpstat 1 5
+
+# Memory usage
+free -h
+vmstat 1 5
+
+# Disk usage
+df -h
+du -sh /var/lib/pterodactyl/*
+
+# I/O statistics
+iostat -x 1 5
+```
+
+#### Network Usage
+
+```bash
+# Network interfaces
+ip -s link
+
+# Connection count
+ss -s
+
+# Active connections
+ss -tunap | grep wings
+
+# Bandwidth usage (requires iftop)
+iftop -i eth0
+```
+
+## Docker Monitoring
+
+### Container Statistics
+
+```bash
+# Real-time stats for all containers
+docker stats
+
+# Stats for specific server
+docker stats ptdl-{server-uuid}
+
+# One-time snapshot
+docker stats --no-stream
+
+# Format output
+docker stats --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}"
+```
+
+### Container Logs
+
+```bash
+# View server console output
+docker logs ptdl-{server-uuid}
+
+# Follow logs in real-time
+docker logs -f ptdl-{server-uuid}
+
+# Last 100 lines
+docker logs --tail 100 ptdl-{server-uuid}
+
+# Logs since timestamp
+docker logs --since 2024-03-04T10:00:00 ptdl-{server-uuid}
+```
+
+### Container Inspection
+
+```bash
+# Detailed container info
+docker inspect ptdl-{server-uuid}
+
+# Resource limits
+docker inspect ptdl-{server-uuid} | jq '.[0].HostConfig | {Memory, MemorySwap, CpuQuota}'
+
+# Network settings
+docker inspect ptdl-{server-uuid} | jq '.[0].NetworkSettings.Ports'
+
+# Container state
+docker inspect ptdl-{server-uuid} | jq '.[0].State'
+```
+
+### List All Servers
+
+```bash
+# All Pterodactyl containers
+docker ps -a --filter "name=ptdl-"
+
+# Running servers only
+docker ps --filter "name=ptdl-"
+
+# Count servers by state
+docker ps -a --filter "name=ptdl-" --format "{{.Status}}" | cut -d' ' -f1 | sort | uniq -c
+```
+
+## Performance Metrics
+
+### Wings API Metrics
+
+Wings exposes system information via its API:
+
+```bash
+# System information
+curl -k https://node.example.com:8080/api/system
+
+# With authentication (if required)
+curl -k -H "Authorization: Bearer <token>" https://node.example.com:8080/api/system
+```
+
+Response includes:
+```json
+{
+  "version": "1.11.0",
+  "arch": "amd64",
+  "os": "linux",
+  "kernel": "5.15.0-58-generic",
+  "cpu_count": 8
+}
+```
+
+### Activity Monitoring
+
+Wings sends activity events to the Panel (app/Http/Controllers/Api/Remote/ActivityProcessingController.php:18):
+
+```json
+{
+  "data": [
+    {
+      "server": "server-uuid",
+      "user": "user-uuid",
+      "event": "server:console.command",
+      "metadata": {"command": "say Hello"},
+      "timestamp": "2026-03-04T12:00:00Z"
+    }
+  ]
+}
+```
+
+View these in the Panel:
+- **Admin Panel** → **Activity Logs**
+- Filter by server, user, or event type
+
+## Health Checks
+
+### Wings Service Status
+
+```bash
+# Check if Wings is running
+systemctl status wings
+
+# Check if enabled to start on boot
+systemctl is-enabled wings
+
+# Check service start time and uptime
+systemctl show wings -p ActiveEnterTimestamp
+```
+
+### Connectivity Tests
+
+```bash
+# Test Wings API
+curl -k https://node.example.com:8080/api/system
+
+# Test SFTP port
+telnet node.example.com 2022
+
+# Test from Panel server
+curl -k https://node.example.com:8080/api/system -H "Authorization: Bearer <token>"
+```
+
+### Docker Health
+
+```bash
+# Check Docker daemon
+systemctl status docker
+
+# Docker version
+docker version
+
+# Docker system info
+docker info
+
+# Check for Docker errors
+journalctl -u docker -p err --since "1 hour ago"
+```
+
+### Panel Connectivity
+
+Check if the node appears online in the Panel:
+
+1. Navigate to **Admin Panel** → **Nodes**
+2. Look for green heart icon next to your node
+3. Click node to view detailed status
+
+If offline, check:
+- Wings is running: `systemctl status wings`
+- Firewall allows Panel IP on port 8080
+- SSL certificate is valid
+- Node token is correct in `/etc/pterodactyl/config.yml`
+
+## Automated Monitoring
+
+### Prometheus & Grafana
+
+Monitor Wings with Prometheus and visualize in Grafana:
+
+#### Setup Prometheus Node Exporter
+
+```bash
+# Install node_exporter
+wget https://github.com/prometheus/node_exporter/releases/download/v1.6.1/node_exporter-1.6.1.linux-amd64.tar.gz
+tar xvfz node_exporter-1.6.1.linux-amd64.tar.gz
+sudo mv node_exporter-1.6.1.linux-amd64/node_exporter /usr/local/bin/
+
+# Create systemd service
+cat > /etc/systemd/system/node_exporter.service << EOF
+[Unit]
+Description=Node Exporter
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/node_exporter
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl enable --now node_exporter
+```
+
+#### Configure cAdvisor for Container Metrics
+
+```bash
+# Run cAdvisor
+docker run -d \
+  --name=cadvisor \
+  --restart=always \
+  --volume=/:/rootfs:ro \
+  --volume=/var/run:/var/run:ro \
+  --volume=/sys:/sys:ro \
+  --volume=/var/lib/docker/:/var/lib/docker:ro \
+  --publish=8081:8080 \
+  gcr.io/cadvisor/cadvisor:latest
+```
+
+#### Prometheus Configuration
+
+Add to Prometheus config:
+
+```yaml
+scrape_configs:
+  - job_name: 'pterodactyl_node'
+    static_configs:
+      - targets: ['node.example.com:9100']  # node_exporter
+        labels:
+          node: 'node1'
+
+  - job_name: 'pterodactyl_containers'
+    static_configs:
+      - targets: ['node.example.com:8081']  # cAdvisor
+        labels:
+          node: 'node1'
+```
+
+### Uptime Monitoring
+
+Monitor Wings availability:
+
+#### UptimeRobot / StatusCake
+
+Configure HTTP(S) monitor:
+- URL: `https://node.example.com:8080/api/system`
+- Interval: 5 minutes
+- Alert on: HTTP status != 200
+
+#### Simple Shell Script
+
+```bash
+cat > /usr/local/bin/check-wings.sh << 'EOF'
+#!/bin/bash
+if ! systemctl is-active --quiet wings; then
+    echo "Wings is down! Attempting restart..."
+    systemctl restart wings
+    
+    # Send alert (customize for your notification system)
+    curl -X POST https://your-webhook-url \
+      -H 'Content-Type: application/json' \
+      -d '{"text":"Wings on node1 was restarted"}'
+fi
+EOF
+
+chmod +x /usr/local/bin/check-wings.sh
+
+# Add to crontab
+echo "*/5 * * * * /usr/local/bin/check-wings.sh" | crontab -
+```
+
+## Alerting
+
+### Disk Space Alerts
+
+```bash
+cat > /usr/local/bin/check-disk.sh << 'EOF'
+#!/bin/bash
+THRESHOLD=90
+USAGE=$(df -h /var/lib/pterodactyl | awk 'NR==2 {print $5}' | sed 's/%//')
+
+if [ "$USAGE" -gt "$THRESHOLD" ]; then
+    echo "Disk usage is ${USAGE}% - exceeds threshold of ${THRESHOLD}%"
+    # Send alert
+    curl -X POST https://your-webhook-url \
+      -H 'Content-Type: application/json' \
+      -d "{\"text\":\"Disk usage on node1: ${USAGE}%\"}"
+fi
+EOF
+
+chmod +x /usr/local/bin/check-disk.sh
+echo "0 * * * * /usr/local/bin/check-disk.sh" | crontab -
+```
+
+### Memory Alerts
+
+```bash
+cat > /usr/local/bin/check-memory.sh << 'EOF'
+#!/bin/bash
+THRESHOLD=90
+USAGE=$(free | grep Mem | awk '{print ($3/$2) * 100.0}' | cut -d. -f1)
+
+if [ "$USAGE" -gt "$THRESHOLD" ]; then
+    echo "Memory usage is ${USAGE}% - exceeds threshold of ${THRESHOLD}%"
+    # Send alert
+    curl -X POST https://your-webhook-url \
+      -H 'Content-Type: application/json' \
+      -d "{\"text\":\"Memory usage on node1: ${USAGE}%\"}"
+fi
+EOF
+
+chmod +x /usr/local/bin/check-memory.sh
+echo "*/15 * * * * /usr/local/bin/check-memory.sh" | crontab -
+```
+
+## Troubleshooting Common Issues
+
+### Wings Won't Start
+
+```bash
+# Check service status
+systemctl status wings
+
+# View recent logs
+journalctl -u wings -n 50
+
+# Common issues:
+# 1. Config file syntax error
+wings configure --check
+
+# 2. Port already in use
+ss -tulpn | grep -E '8080|2022'
+
+# 3. Docker not running
+systemctl status docker
+
+# 4. SSL certificate issues
+openssl x509 -in /etc/letsencrypt/live/node.example.com/cert.pem -noout -dates
+```
+
+### High CPU Usage
+
+```bash
+# Identify CPU-intensive containers
+docker stats --no-stream | sort -k 3 -hr | head -10
+
+# Check Wings process
+top -p $(pgrep wings)
+
+# Check for runaway containers
+docker ps -q | xargs docker inspect --format='{{.State.Pid}} {{.Name}}' | while read pid name; do
+    echo "$name: $(ps -p $pid -o %cpu=)"
+done | sort -k2 -hr
+```
+
+### High Memory Usage
+
+```bash
+# Identify memory-intensive containers
+docker stats --no-stream | sort -k 4 -hr | head -10
+
+# Check for memory leaks
+for container in $(docker ps -q --filter "name=ptdl-"); do
+    echo "Container: $container"
+    docker stats --no-stream $container
+done
+
+# Check system memory
+free -h
+vmstat 1 5
+```
+
+### Disk Space Issues
+
+```bash
+# Check disk usage
+df -h
+
+# Find large directories
+du -sh /var/lib/pterodactyl/volumes/* | sort -hr | head -10
+
+# Check Docker disk usage
+docker system df
+
+# Clean up Docker resources
+docker system prune -a  # WARNING: Removes unused images
+
+# Clean up old logs
+journalctl --vacuum-time=7d
+```
+
+### Network Issues
+
+```bash
+# Test Panel connectivity
+curl -k https://panel.example.com
+
+# Test Wings API
+curl -k https://node.example.com:8080/api/system
+
+# Check port connectivity
+telnet node.example.com 8080
+telnet node.example.com 2022
+
+# Check firewall rules
+ufw status numbered
+iptables -L -n
+
+# Check Docker networking
+docker network ls
+docker network inspect bridge
+```
+
+## Performance Optimization
+
+### Monitor Performance Bottlenecks
+
+```bash
+# CPU bottlenecks
+mpstat -P ALL 1 5
+
+# Memory bottlenecks
+vmstat 1 5
+
+# Disk I/O bottlenecks
+iostat -x 1 5
+
+# Network bottlenecks
+sar -n DEV 1 5
+```
+
+### Optimize Based on Metrics
+
+If you identify bottlenecks:
+
+- **High CPU**: Reduce server count or upgrade CPU
+- **High Memory**: Add RAM or reduce server memory allocations
+- **Disk I/O**: Use faster storage (NVMe SSD) or reduce disk-intensive servers
+- **Network**: Upgrade network interface or reduce bandwidth-heavy servers
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Security" icon="shield" href="/wings/security">
+    Secure your Wings installation
+  </Card>
+  <Card title="Configuration" icon="gear" href="/wings/configuration">
+    Optimize Wings configuration
+  </Card>
+  <Card title="Docker Management" icon="docker" href="/wings/docker-management">
+    Container resource management
+  </Card>
+  <Card title="Networking" icon="network-wired" href="/wings/networking">
+    Network performance tuning
+  </Card>
+</CardGroup>

@@ -1,0 +1,137 @@
+---
+title: 'API Overview'
+description: 'Understanding the Pterodactyl Panel API structure'
+---
+
+Pterodactyl provides two distinct APIs for interacting with the Panel: the **Application API** and the **Client API**. Each serves different purposes and has different authentication requirements.
+
+## API Types
+
+### Application API
+
+The Application API is designed for administrative tasks and full system management. It provides complete control over the Panel, including:
+
+- Managing users, nodes, and locations
+- Creating and modifying servers
+- Managing nests and eggs
+- Allocating resources
+- Database administration
+
+**Base URL**: `/api/application`
+
+**Authentication**: Requires an Application API key with specific resource permissions.
+
+**Use Cases**:
+- Billing system integration
+- Automated server provisioning
+- Administrative automation
+- External control panels
+
+### Client API
+
+The Client API allows users to manage their own servers and account settings. It provides:
+
+- Server power management
+- File management operations
+- Database management for assigned servers
+- Schedule and backup management
+- Account settings and API key management
+
+**Base URL**: `/api/client`
+
+**Authentication**: Requires a Client API key or session authentication.
+
+**Use Cases**:
+- Custom control panels
+- Mobile applications
+- Server management tools
+- Automated server tasks
+
+## API Resources
+
+### Application API Resources
+
+The Application API exposes the following main resources:
+
+- **Users** (`/api/application/users`) - User management
+- **Nodes** (`/api/application/nodes`) - Node management and configuration
+- **Locations** (`/api/application/locations`) - Location management
+- **Servers** (`/api/application/servers`) - Server administration
+- **Nests** (`/api/application/nests`) - Nest and egg management
+
+### Client API Resources
+
+The Client API provides access to:
+
+- **Account** (`/api/client/account`) - Account settings and API keys
+- **Servers** (`/api/client/servers/{server}`) - Individual server management
+- **Files** - File manager operations
+- **Databases** - Database management
+- **Schedules** - Task scheduling
+- **Backups** - Backup management
+- **Network** - Allocation management
+
+## Request Format
+
+All API requests must:
+
+1. Include proper authentication headers
+2. Use JSON for request bodies (where applicable)
+3. Set `Content-Type: application/json` header
+4. Set `Accept: application/json` header
+
+## Response Format
+
+All API responses are returned in JSON format with the following structure:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "server",
+      "attributes": {
+        // Resource attributes
+      }
+    }
+  ],
+  "meta": {
+    "pagination": {
+      "total": 100,
+      "count": 50,
+      "per_page": 50,
+      "current_page": 1,
+      "total_pages": 2
+    }
+  }
+}
+```
+
+## Pagination
+
+List endpoints support pagination with the following query parameters:
+
+- `page` - The page number to retrieve
+- `per_page` - Number of items per page (max varies by endpoint)
+
+## Filtering and Includes
+
+Many endpoints support:
+
+- **Filtering**: `?filter[field]=value`
+- **Includes**: `?include=subusers,allocations`
+
+## Error Handling
+
+See the [Errors](/api/errors) page for detailed information on error responses.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    Learn how to authenticate API requests
+  </Card>
+  <Card title="Rate Limiting" icon="gauge" href="/api/rate-limiting">
+    Understand API rate limits
+  </Card>
+</CardGroup>

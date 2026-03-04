@@ -1,0 +1,492 @@
+---
+title: 'Docker Management'
+description: 'How Wings manages Docker containers for game servers'
+---
+
+## Overview
+
+Wings uses Docker to isolate and manage game servers. Each server runs in its own container with dedicated resources, providing security, performance, and reliability benefits.
+
+## Container Lifecycle
+
+Wings manages the complete lifecycle of server containers:
+
+```
+┌─────────────┐
+│   Created   │ Container exists but not started
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│  Installing │ Running installation script
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│   Stopped   │ Container exists, server offline
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│   Starting  │ Container booting up
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│   Running   │ Server online and active
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│  Stopping   │ Gracefully shutting down
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│   Stopped   │
+└─────────────┘
+```
+
+## Container Creation
+
+When a server is created in the Panel, Wings creates a Docker container with specific configuration from `ServerConfigurationStructureService` (app/Services/Servers/ServerConfigurationStructureService.php:43):
+
+### Container Specification
+
+```json
+{
+  "uuid": "server-uuid",
+  "container": {
+    "image": "ghcr.io/pterodactyl/yolks:java_17",
+    "oom_disabled": true
+  },
+  "build": {
+    "memory_limit": 2048,
+    "swap": 0,
+    "io_weight": 500,
+    "cpu_limit": 200,
+    "threads": "0-3",
+    "disk_space": 10240,
+    "oom_disabled": true
+  },
+  "allocations": {
+    "default": {
+      "ip": "0.0.0.0",
+      "port": 25565
+    },
+    "mappings": {
+      "25565": 25565,
+      "25566": 25566
+    }
+  }
+}
+```
+
+### Resource Limits
+
+Wings enforces strict resource limits on containers:
+
+#### Memory
+
+```yaml
+memory_limit: 2048  # MB
+swap: 0             # MB (0 = disabled)
+```
+
+- **memory_limit**: Maximum RAM the container can use
+- **swap**: Additional swap space (typically 0 for game servers)
+- **oom_disabled**: Prevent OOM killer from stopping container
+
+#### CPU
+
+```yaml
+cpu_limit: 200   # 200% = 2 cores
+threads: "0-3"   # Limit to specific CPU cores
+```
+
+- **cpu_limit**: CPU quota (100 = 1 core, 200 = 2 cores)
+- **threads**: Pin to specific CPU cores (optional)
+
+#### Disk
+
+```yaml
+disk_space: 10240  # MB
+io_weight: 500     # I/O priority (10-1000)
+```
+
+- **disk_space**: Maximum disk usage
+- **io_weight**: I/O scheduling weight (higher = more priority)
+
+## Server Installation
+
+Wings handles server installation through a dedicated installation container:
+
+<Steps>
+  <Step title="Panel provides installation script">
+    Wings requests installation data from `/api/remote/servers/{uuid}/install` (app/Http/Controllers/Api/Remote/Servers/ServerInstallController.php:31):
+    
+    ```json
+    {
+      "container_image": "debian:buster-slim",
+      "entrypoint": "bash",
+      "script": "#!/bin/bash\napt update\napt install -y curl\ncurl -O https://example.com/server.jar"
+    }
+    ```
+  </Step>
+  
+  <Step title="Wings creates installation container">
+    A temporary container is created with:
+    - Installation image (e.g., `debian:buster-slim`)
+    - Server files mounted
+    - Installation script as entrypoint
+  </Step>
+  
+  <Step title="Script execution">
+    The installation script runs with elevated privileges to download and setup server files.
+  </Step>
+  
+  <Step title="Installation completion">
+    Wings reports status to `/api/remote/servers/{uuid}/install` (app/Http/Controllers/Api/Remote/Servers/ServerInstallController.php:53):
+    
+    ```json
+    {
+      "successful": true,
+      "reinstall": false
+    }
+    ```
+  </Step>
+</Steps>
+
+From the EggInstallController (app/Http/Controllers/Api/Remote/EggInstallController.php:26), Wings receives:
+
+```json
+{
+  "scripts": {
+    "install": "#!/bin/bash\n...",
+    "privileged": true
+  },
+  "config": {
+    "container": "debian:buster-slim",
+    "entry": "bash"
+  },
+  "env": {
+    "SERVER_JARFILE": "server.jar",
+    "MINECRAFT_VERSION": "1.20.1"
+  }
+}
+```
+
+## Container Images (Yolks)
+
+Wings uses container images called "Yolks" that provide runtime environments:
+
+### Common Yolks
+
+| Game/App | Image |
+| --- | --- |
+| Minecraft (Java) | `ghcr.io/pterodactyl/yolks:java_17` |
+| Minecraft (Bedrock) | `ghcr.io/pterodactyl/yolks:bedrock` |
+| Rust | `ghcr.io/pterodactyl/yolks:games_rust` |
+| CS:GO | `ghcr.io/pterodactyl/yolks:source` |
+| Node.js | `ghcr.io/pterodactyl/yolks:nodejs_18` |
+| Python | `ghcr.io/pterodactyl/yolks:python_3.11` |
+
+### Image Management
+
+Wings automatically pulls required images:
+
+```bash
+# Wings pulls images as needed
+# View pulled images
+docker images | grep pterodactyl
+
+# Manually pull an image
+docker pull ghcr.io/pterodactyl/yolks:java_17
+
+# Remove unused images
+docker image prune -a
+```
+
+## Container Networking
+
+Wings configures container networking using Docker's bridge network:
+
+### Port Allocation
+
+Ports are mapped from the container to the host:
+
+```yaml
+allocations:
+  default:
+    ip: 0.0.0.0
+    port: 25565
+  mappings:
+    25565: 25565  # container:host
+    25566: 25566
+```
+
+This creates Docker port mappings:
+
+```bash
+docker run -p 25565:25565 -p 25566:25566 ...
+```
+
+### Network Mode
+
+By default, containers use bridge networking. Wings handles:
+
+- Port allocation and mapping
+- IP address assignment
+- Network isolation between servers
+
+## Container Storage
+
+Each server gets a dedicated volume for persistence:
+
+### Volume Structure
+
+```
+/var/lib/pterodactyl/volumes/
+├── 1a2b3c4d-5e6f-7g8h-9i0j-1k2l3m4n5o6p/
+│   ├── server.jar
+│   ├── world/
+│   ├── plugins/
+│   └── logs/
+└── 2b3c4d5e-6f7g-8h9i-0j1k-2l3m4n5o6p7q/
+    └── ...
+```
+
+Volumes are mounted into containers at `/home/container`:
+
+```bash
+docker run -v /var/lib/pterodactyl/volumes/{uuid}:/home/container ...
+```
+
+### Mounts
+
+Additional host directories can be mounted (configured in Wings config):
+
+```yaml
+allowed_mounts:
+  - /opt/shared-configs
+```
+
+Mounts configuration (app/Services/Servers/ServerConfigurationStructureService.php:80):
+
+```json
+{
+  "mounts": [
+    {
+      "source": "/opt/shared-configs",
+      "target": "/mnt/configs",
+      "read_only": true
+    }
+  ]
+}
+```
+
+## Environment Variables
+
+Wings injects environment variables into containers:
+
+```bash
+SERVER_MEMORY=2048
+SERVER_IP=0.0.0.0
+SERVER_PORT=25565
+MINECRAFT_VERSION=1.20.1
+P_SERVER_UUID=1a2b3c4d-5e6f-7g8h-9i0j-1k2l3m4n5o6p
+```
+
+These variables come from the Panel's EnvironmentService and are used in startup commands:
+
+```bash
+java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar server.jar
+```
+
+## Container Monitoring
+
+Wings continuously monitors container stats:
+
+### Resource Usage
+
+```bash
+# View container stats
+docker stats $(docker ps -q)
+
+# View specific server
+docker stats ptdl-1a2b3c4d
+```
+
+Wings reports these stats to the Panel for display in the web interface.
+
+### Container Logs
+
+Wings captures container output:
+
+```bash
+# View container logs
+docker logs -f ptdl-1a2b3c4d
+
+# View last 100 lines
+docker logs --tail 100 ptdl-1a2b3c4d
+```
+
+Logs are streamed to the Panel via WebSocket for the web console.
+
+## Container Security
+
+### Isolation
+
+Each container is isolated:
+
+- Separate filesystem (volumes)
+- Isolated network namespace
+- Resource limits enforced by cgroups
+- User namespace separation
+
+### Security Features
+
+```bash
+# Containers run with restricted capabilities
+--cap-drop=ALL
+--cap-add=NET_BIND_SERVICE
+
+# Read-only root filesystem (optional)
+--read-only
+--tmpfs /tmp
+
+# Security options
+--security-opt=no-new-privileges
+```
+
+<Warning>
+Some game servers require specific capabilities. Wings configures these automatically based on egg configuration.
+</Warning>
+
+## Container Management Commands
+
+### List Containers
+
+```bash
+# List all Pterodactyl containers
+docker ps -a --filter "name=ptdl-"
+
+# List running servers
+docker ps --filter "name=ptdl-"
+```
+
+### Inspect Container
+
+```bash
+# View container details
+docker inspect ptdl-1a2b3c4d
+
+# View resource limits
+docker inspect ptdl-1a2b3c4d | grep -A 10 HostConfig
+```
+
+### Execute Commands
+
+```bash
+# Access container shell
+docker exec -it ptdl-1a2b3c4d /bin/bash
+
+# Run command in container
+docker exec ptdl-1a2b3c4d ls -la /home/container
+```
+
+<Warning>
+Direct Docker commands can interfere with Wings management. Only use for debugging.
+</Warning>
+
+## Troubleshooting
+
+### Container Won't Start
+
+```bash
+# Check container status
+docker ps -a --filter "name=ptdl-{uuid}"
+
+# View container logs
+docker logs ptdl-{uuid}
+
+# Check Wings logs
+journalctl -u wings -n 100
+```
+
+### High Resource Usage
+
+```bash
+# Identify resource-heavy containers
+docker stats --no-stream | sort -k 3 -h
+
+# Check specific container limits
+docker inspect ptdl-{uuid} | grep -A 20 HostConfig
+```
+
+### Permission Issues
+
+```bash
+# Check volume permissions
+ls -la /var/lib/pterodactyl/volumes/{uuid}/
+
+# Fix permissions (if needed)
+chown -R 1000:1000 /var/lib/pterodactyl/volumes/{uuid}/
+```
+
+## Advanced Container Features
+
+### OOM Prevention
+
+Wings can disable the OOM killer for containers:
+
+```json
+{
+  "build": {
+    "oom_disabled": true
+  }
+}
+```
+
+This prevents Docker from killing the container when it reaches memory limits.
+
+### CPU Pinning
+
+Pin containers to specific CPU cores:
+
+```json
+{
+  "build": {
+    "threads": "0-3"  // Use cores 0-3
+  }
+}
+```
+
+### I/O Priority
+
+Control disk I/O priority:
+
+```json
+{
+  "build": {
+    "io_weight": 750  // Higher = more I/O priority
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Networking" icon="network-wired" href="/wings/networking">
+    Configure network and port allocation
+  </Card>
+  <Card title="Security" icon="shield" href="/wings/security">
+    Secure container configuration
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/wings/monitoring">
+    Monitor container performance
+  </Card>
+  <Card title="Configuration" icon="gear" href="/wings/configuration">
+    Advanced Wings configuration
+  </Card>
+</CardGroup>

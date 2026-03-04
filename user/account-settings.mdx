@@ -1,0 +1,99 @@
+---
+title: 'Account Settings'
+description: 'Manage your account settings, email, and password'
+icon: 'user-gear'
+---
+
+## Overview
+
+Your account settings allow you to manage your personal information, email address, and password. All account changes are logged in the activity feed for security purposes.
+
+## Updating Your Email
+
+You can update your email address at any time through your account settings.
+
+<Steps>
+  <Step title="Navigate to Account Settings">
+    Click on your profile icon in the top right corner and select **Account Settings**.
+  </Step>
+  
+  <Step title="Enter New Email">
+    In the email field, enter your new email address.
+  </Step>
+  
+  <Step title="Confirm Current Password">
+    For security, you'll need to confirm your current password before the email change is saved.
+  </Step>
+  
+  <Step title="Save Changes">
+    Click **Update Email** to save your changes.
+  </Step>
+</Steps>
+
+<Warning>
+Changing your email address will log this action in your activity feed. Make sure you have access to your new email address for future account recovery.
+</Warning>
+
+## Changing Your Password
+
+Regularly updating your password helps keep your account secure.
+
+<Steps>
+  <Step title="Access Password Settings">
+    From your account settings page, navigate to the **Password** section.
+  </Step>
+  
+  <Step title="Enter Current Password">
+    Enter your current password to verify your identity.
+  </Step>
+  
+  <Step title="Set New Password">
+    Enter your new password and confirm it by typing it again.
+  </Step>
+  
+  <Step title="Update Password">
+    Click **Update Password** to save your new password.
+  </Step>
+</Steps>
+
+### Security Features
+
+When you change your password:
+
+- All existing sessions on other devices will be **automatically logged out**
+- Your current session will remain active
+- The password change is logged in your activity feed
+- You'll need to use the new password for future logins
+
+<Note>
+The system uses secure password hashing and verification through Laravel's authentication system (see `AccountController.php:56-74`).
+</Note>
+
+<Warning>
+**Important Security Notes:**
+- Use a strong, unique password
+- Avoid reusing passwords from other services
+- Consider enabling Two-Factor Authentication for additional security
+- All other devices will be logged out immediately after changing your password
+</Warning>
+
+## Activity Logging
+
+All account changes are automatically logged:
+
+- **Email Changes**: Logs both old and new email addresses (`user:account.email-changed`)
+- **Password Changes**: Logs password update events (`user:account.password-changed`)
+
+You can view these logs in your activity feed to monitor account security.
+
+## API Endpoint Reference
+
+The account settings are managed through the following API endpoints:
+
+```http
+GET /api/client/account
+PUT /api/client/account/email
+PUT /api/client/account/password
+```
+
+For detailed API documentation, see the [Account API Reference](/api/client/account).

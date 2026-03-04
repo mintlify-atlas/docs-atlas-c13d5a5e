@@ -1,0 +1,480 @@
+---
+title: Mount Management
+description: Managing shared directories and file mounts across servers
+---
+
+Mounts allow you to share directories from the host system with game server containers. This is useful for sharing assets, maps, plugins, or other files across multiple servers.
+
+## What are Mounts?
+
+A mount creates a bind mount from the host filesystem into server containers. From `app/Models/Mount.php:56-63`:
+
+```php
+public static array $validationRules = [
+    'name' => 'required|string|min:2|max:64|unique:mounts,name',
+    'description' => 'nullable|string|max:191',
+    'source' => 'required|string',
+    'target' => 'required|string',
+    'read_only' => 'sometimes|boolean',
+    'user_mountable' => 'sometimes|boolean',
+];
+```
+
+### Mount Properties
+
+- **Name**: Unique identifier for the mount
+- **Description**: What the mount contains
+- **Source**: Path on the host system
+- **Target**: Path inside the container
+- **Read Only**: Whether users can write to the mount
+- **User Mountable**: Whether users can mount/unmount themselves
+
+## Creating a Mount
+
+<Steps>
+  <Step title="Navigate to Mounts">
+    Go to **Admin Panel** → **Mounts** → **Create New**
+  </Step>
+  
+  <Step title="Configure Mount Details">
+    **Basic Information**
+    - **Name**: Unique name (e.g., `shared-maps`, `plugin-library`)
+    - **Description**: What this mount provides
+  </Step>
+  
+  <Step title="Set Paths">
+    **Mount Paths**
+    - **Source**: Host path (e.g., `/mnt/shared/maps`)
+    - **Target**: Container path (e.g., `/home/container/maps`)
+    
+    <Warning>
+    The source path must exist on all nodes where this mount will be used.
+    </Warning>
+  </Step>
+  
+  <Step title="Configure Permissions">
+    **Access Settings**
+    - **Read Only**: Check if users should not be able to write
+    - **User Mountable**: Allow users to mount this themselves
+  </Step>
+  
+  <Step title="Create Mount">
+    Click **Create** to save the mount
+  </Step>
+  
+  <Step title="Assign to Nodes and Eggs">
+    After creation, assign the mount to specific nodes and eggs
+  </Step>
+</Steps>
+
+## Path Restrictions
+
+Certain paths are blacklisted for security (from `app/Models/Mount.php:87-98`):
+
+### Invalid Source Paths
+
+```php
+public static $invalidSourcePaths = [
+    '/etc/pterodactyl',
+    '/var/lib/pterodactyl/volumes',
+    '/srv/daemon-data',
+];
+```
+
+These directories contain sensitive Panel/Wings data.
+
+### Invalid Target Paths
+
+```php
+public static $invalidTargetPaths = [
+    '/home/container',
+];
+```
+
+The target cannot be the container's root directory.
+
+<Warning>
+Attempting to use blacklisted paths will result in a validation error.
+</Warning>
+
+## Assigning Mounts to Nodes
+
+Mounts must be assigned to nodes before they can be used:
+
+<Steps>
+  <Step title="Navigate to Mount">
+    Click on the mount you created
+  </Step>
+  
+  <Step title="Add Nodes">
+    In the **Nodes** section, select nodes that have the source path available
+  </Step>
+  
+  <Step title="Save Assignment">
+    Click **Add Nodes** to assign
+  </Step>
+</Steps>
+
+From `app/Http/Controllers/Admin/MountController.php:132-144`:
+
+```php
+public function addNodes(Request $request, Mount $mount): RedirectResponse
+{
+    $data = $request->validate(['nodes' => 'required|exists:nodes,id']);
+
+    $nodes = $data['nodes'] ?? [];
+    if (count($nodes) > 0) {
+        $mount->nodes()->attach($nodes);
+    }
+
+    $this->alert->success('Mount was updated successfully.')->flash();
+
+    return redirect()->route('admin.mounts.view', $mount->id);
+}
+```
+
+<Note>
+Only nodes with this mount assigned will have the directory available in containers.
+</Note>
+
+## Assigning Mounts to Eggs
+
+Mounts can be restricted to specific eggs:
+
+<Steps>
+  <Step title="Navigate to Mount">
+    Click on the mount
+  </Step>
+  
+  <Step title="Add Eggs">
+    In the **Eggs** section, select which eggs should have access
+  </Step>
+  
+  <Step title="Save Assignment">
+    Click **Add Eggs** to assign
+  </Step>
+</Steps>
+
+From `app/Http/Controllers/Admin/MountController.php:113-127`:
+
+```php
+public function addEggs(Request $request, Mount $mount): RedirectResponse
+{
+    $validatedData = $request->validate([
+        'eggs' => 'required|exists:eggs,id',
+    ]);
+
+    $eggs = $validatedData['eggs'] ?? [];
+    if (count($eggs) > 0) {
+        $mount->eggs()->attach($eggs);
+    }
+
+    $this->alert->success('Mount was updated successfully.')->flash();
+
+    return redirect()->route('admin.mounts.view', $mount->id);
+}
+```
+
+### Why Assign to Eggs?
+
+Assigning mounts to specific eggs ensures:
+
+- Only relevant servers get the mount
+- Better security and isolation
+- Cleaner server configurations
+
+For example:
+- Map mounts only for Source Engine eggs
+- Plugin directories only for Minecraft eggs
+- Asset libraries only for specific game types
+
+## Mount Relationships
+
+Mounts use many-to-many relationships:
+
+### Eggs Relationship
+
+From `app/Models/Mount.php:105-108`:
+
+```php
+public function eggs(): BelongsToMany
+{
+    return $this->belongsToMany(Egg::class);
+}
+```
+
+### Nodes Relationship
+
+From `app/Models/Mount.php:115-118`:
+
+```php
+public function nodes(): BelongsToMany
+{
+    return $this->belongsToMany(Node::class);
+}
+```
+
+### Servers Relationship
+
+From `app/Models/Mount.php:125-128`:
+
+```php
+public function servers(): BelongsToMany
+{
+    return $this->belongsToMany(Server::class);
+}
+```
+
+## User Mountable Option
+
+When `user_mountable` is enabled:
+
+- Users can see the mount in their server settings
+- Users can toggle the mount on/off for their servers
+- Useful for optional content (maps, plugins)
+
+When disabled:
+- Only admins can assign the mount
+- Automatically mounted on applicable servers
+- Users cannot remove it
+
+## Node Configuration
+
+When a mount is assigned to a node, it's added to the Wings configuration.
+
+From `app/Models/Node.php:165`:
+
+```php
+'allowed_mounts' => $this->mounts->pluck('source')->toArray(),
+```
+
+Wings will only allow mounts that are in this list.
+
+## Common Use Cases
+
+### Shared Map Repository
+
+**Use Case**: Share a collection of maps across all Source Engine servers
+
+```
+Name: source-maps
+Description: Shared Source Engine maps
+Source: /mnt/storage/source-maps
+Target: /home/container/csgo/maps
+Read Only: true
+User Mountable: false
+```
+
+Assign to:
+- CS:GO, TF2, Garry's Mod eggs
+- All nodes hosting Source servers
+
+### Plugin Library
+
+**Use Case**: Provide a library of plugins users can access
+
+```
+Name: minecraft-plugins
+Description: Common Minecraft plugins
+Source: /mnt/storage/mc-plugins
+Target: /home/container/plugins-library
+Read Only: true
+User Mountable: true
+```
+
+Assign to:
+- Paper, Spigot, Bukkit eggs
+- All Minecraft nodes
+
+### Shared Configuration
+
+**Use Case**: Enforce consistent configuration files
+
+```
+Name: server-configs
+Description: Default server configurations
+Source: /mnt/storage/configs
+Target: /home/container/defaults
+Read Only: true
+User Mountable: false
+```
+
+### Mod Repository
+
+**Use Case**: Provide mods for users to install
+
+```
+Name: mod-library
+Description: Available game mods
+Source: /mnt/storage/mods
+Target: /home/container/available-mods
+Read Only: true
+User Mountable: true
+```
+
+## Security Considerations
+
+### Read-Only Mounts
+
+Always use read-only mounts unless write access is required:
+
+- Prevents users from modifying shared content
+- Protects against malicious file modifications
+- Ensures consistency across servers
+
+### Path Validation
+
+Be careful with mount paths:
+
+- Never mount sensitive system directories
+- Avoid mounting directories with write access to critical files
+- Use specific paths, not broad directories
+
+<Warning>
+Mounting `/` or `/var` as writable could allow container escape and system compromise.
+</Warning>
+
+### User Mountable Security
+
+Only make mounts user-mountable if:
+
+- The content is safe for all users
+- Read-only access is enforced
+- The mount doesn't contain sensitive data
+
+## Managing Existing Mounts
+
+### Viewing Mounts
+
+The mounts index page shows:
+
+- Mount name and description
+- Source and target paths
+- Number of assigned nodes
+- Number of assigned eggs
+- Number of servers using the mount
+
+### Editing a Mount
+
+<Steps>
+  <Step title="Navigate to Mount">
+    Click on the mount you want to edit
+  </Step>
+  
+  <Step title="Modify Settings">
+    Update name, description, paths, or permissions
+  </Step>
+  
+  <Step title="Save Changes">
+    Click **Update** to save
+  </Step>
+</Steps>
+
+<Warning>
+Changing paths on an active mount can break existing servers. Stop affected servers first.
+</Warning>
+
+### Removing Nodes or Eggs
+
+To remove a node or egg assignment:
+
+1. Navigate to the mount
+2. Click the **X** next to the node or egg
+3. Confirm removal
+
+From `app/Http/Controllers/Admin/MountController.php:149-163`:
+
+```php
+public function deleteEgg(Mount $mount, int $egg_id): Response
+{
+    $mount->eggs()->detach($egg_id);
+    return response('', 204);
+}
+
+public function deleteNode(Mount $mount, int $node_id): Response
+{
+    $mount->nodes()->detach($node_id);
+    return response('', 204);
+}
+```
+
+### Deleting a Mount
+
+<Steps>
+  <Step title="Remove from Servers">
+    Ensure no servers are actively using the mount
+  </Step>
+  
+  <Step title="Delete Mount">
+    Navigate to the mount and click **Delete**
+  </Step>
+  
+  <Step title="Confirm Deletion">
+    Confirm you want to delete the mount
+  </Step>
+</Steps>
+
+From `app/Http/Controllers/Admin/MountController.php:103-108`:
+
+```php
+public function delete(Mount $mount): RedirectResponse
+{
+    $mount->delete();
+
+    return redirect()->route('admin.mounts');
+}
+```
+
+## Troubleshooting
+
+### Mount Not Available
+
+**Problem**: Mount doesn't appear in server settings
+
+**Solutions**:
+1. Verify mount is assigned to the server's egg
+2. Check mount is assigned to the server's node
+3. Ensure `user_mountable` is enabled (if user-facing)
+4. Restart Wings on the node
+
+### Permission Denied
+
+**Problem**: Servers can't access mounted files
+
+**Solutions**:
+1. Check source directory exists on the node
+2. Verify directory permissions (should be readable by Wings)
+3. Check SELinux/AppArmor policies
+4. Ensure Docker can access the path
+
+### Files Not Syncing
+
+**Problem**: Changes to source aren't visible in containers
+
+**Solutions**:
+1. Verify the mount is active (check server settings)
+2. Restart the server container
+3. Check Wings logs for mount errors
+4. Ensure source path is correct
+
+## Best Practices
+
+1. **Use Read-Only**: Default to read-only mounts for security
+2. **Specific Paths**: Mount specific directories, not entire drives
+3. **Document Mounts**: Clearly describe what each mount provides
+4. **Test First**: Test mounts on a development server before production
+5. **Consistent Paths**: Use the same source paths across all nodes
+6. **Regular Audits**: Review mounts periodically for security
+7. **Backup Sources**: Keep backups of important mounted directories
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Nests & Eggs" icon="egg" href="/admin/nests-eggs">
+    Learn about assigning mounts to eggs
+  </Card>
+  
+  <Card title="Node Management" icon="cube" href="/admin/nodes">
+    Understand node configuration for mounts
+  </Card>
+</CardGroup>

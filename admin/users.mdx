@@ -1,0 +1,277 @@
+---
+title: User Management
+description: Managing user accounts, permissions, and access in Pterodactyl Panel
+---
+
+The User Management section allows administrators to create, modify, and delete user accounts. Users are the foundation of the Panel, as each server must be owned by a user account.
+
+## Viewing Users
+
+The users index page displays all registered users with the following information:
+
+- **Username**: Unique lowercase identifier
+- **Email**: User's email address (must be unique)
+- **Servers**: Number of servers owned by the user
+- **Subuser Of**: Number of servers the user has subuser access to
+- **Admin Status**: Whether the user has root admin privileges
+
+The user list is paginated at 50 users per page and can be filtered by:
+
+- Username
+- Email
+- UUID
+
+<Note>
+Users are sorted by admin status by default, showing administrators first.
+</Note>
+
+## User Model Fields
+
+Each user account contains the following fields (from `app/Models/User.php:124-137`):
+
+```php
+protected $fillable = [
+    'external_id',      // External system identifier (optional)
+    'username',         // Unique username (lowercase)
+    'email',            // Unique email address
+    'name_first',       // First name
+    'name_last',        // Last name
+    'password',         // Hashed password
+    'language',         // Interface language (default: 'en')
+    'use_totp',         // Two-factor authentication enabled
+    'totp_secret',      // TOTP secret key
+    'totp_authenticated_at', // Last 2FA authentication
+    'gravatar',         // Use Gravatar for avatar
+    'root_admin',       // Administrator status
+];
+```
+
+## Creating a New User
+
+<Steps>
+  <Step title="Navigate to Users Section">
+    Go to **Admin Panel** → **Users** → **Create New**
+  </Step>
+  
+  <Step title="Fill in User Details">
+    Enter the required information:
+    
+    - **Email**: Must be unique and valid
+    - **Username**: 1-191 characters, will be converted to lowercase
+    - **First Name**: User's first name
+    - **Last Name**: User's last name
+  </Step>
+  
+  <Step title="Set Password (Optional)">
+    You can either:
+    - Set a password for the user
+    - Leave blank to send a password reset email
+  </Step>
+  
+  <Step title="Configure Admin Status">
+    Check **Administrator** if the user should have root admin access
+  </Step>
+  
+  <Step title="Select Language">
+    Choose the default interface language for the user
+  </Step>
+  
+  <Step title="Create Account">
+    Click **Create User** to save the account
+  </Step>
+</Steps>
+
+<Warning>
+When you create a user with a blank password, they will receive an email with a password reset link. Ensure your mail settings are configured correctly.
+</Warning>
+
+## Editing an Existing User
+
+To modify a user account:
+
+1. Navigate to **Admin Panel** → **Users**
+2. Click on the user you want to edit
+3. Modify any of the following fields:
+   - Email address
+   - Username
+   - First and last name
+   - Password
+   - Language preference
+   - Administrator status
+4. Click **Update User** to save changes
+
+### Validation Rules
+
+User data is validated according to these rules (from `app/Models/User.php:168-180`):
+
+```php
+public static array $validationRules = [
+    'uuid' => 'required|string|size:36|unique:users,uuid',
+    'email' => 'required|email|between:1,191|unique:users,email',
+    'external_id' => 'sometimes|nullable|string|max:191|unique:users,external_id',
+    'username' => 'required|between:1,191|unique:users,username',
+    'name_first' => 'required|string|between:1,191',
+    'name_last' => 'required|string|between:1,191',
+    'password' => 'sometimes|nullable|string',
+    'root_admin' => 'boolean',
+    'language' => 'string',
+    'use_totp' => 'boolean',
+    'totp_secret' => 'nullable|string',
+];
+```
+
+## Deleting a User
+
+Before deleting a user:
+
+1. Ensure they don't own any active servers (transfer ownership first)
+2. Remove them as subusers from any servers
+3. Navigate to the user's detail page
+4. Click **Delete User**
+5. Confirm the deletion
+
+<Warning>
+You cannot delete your own account while logged in. This prevents accidental lockout from the admin panel.
+</Warning>
+
+The deletion check is in `app/Http/Controllers/Admin/UserController.php:92-95`:
+
+```php
+if ($request->user()->is($user)) {
+    throw new DisplayException(__('admin/user.exceptions.delete_self'));
+}
+```
+
+## Administrator Privileges
+
+When the `root_admin` field is set to `true`, the user gains:
+
+- Full access to the admin panel
+- Ability to view and manage all servers
+- Permission to create/modify/delete other users
+- Access to system settings and configuration
+- Node and location management
+- Database host configuration
+
+<Note>
+There is no granular permission system for administrators. All root admins have identical permissions.
+</Note>
+
+## Two-Factor Authentication
+
+Users can enable 2FA from their account settings:
+
+- **use_totp**: Boolean flag indicating if 2FA is enabled
+- **totp_secret**: Encrypted TOTP secret key
+- **totp_authenticated_at**: Timestamp of last successful 2FA login
+
+Administrators can see if a user has 2FA enabled but cannot disable it directly (users must disable it themselves).
+
+## External ID Integration
+
+The `external_id` field allows integration with external systems:
+
+- Must be unique across all users
+- Optional field (can be null)
+- Useful for syncing with billing systems or other platforms
+- Maximum 191 characters
+
+## JSON API Access
+
+Administrators can query users via JSON endpoint (from `app/Http/Controllers/Admin/UserController.php:136-155`):
+
+```http
+GET /admin/users/json?filter[email]=user@example.com
+```
+
+This endpoint:
+- Returns 25 users per page
+- Can filter by email
+- Includes MD5 hash of email (for Gravatar)
+- Supports single user lookup with `user_id` parameter
+
+## User Relationships
+
+Users have the following relationships:
+
+### Owned Servers
+
+Servers where the user is the owner (`owner_id`):
+
+```php
+public function servers(): HasMany
+{
+    return $this->hasMany(Server::class, 'owner_id');
+}
+```
+
+### Accessible Servers
+
+Servers the user can access (as owner or subuser):
+
+```php
+public function accessibleServers(): Builder
+{
+    return Server::query()
+        ->select('servers.*')
+        ->leftJoin('subusers', 'subusers.server_id', '=', 'servers.id')
+        ->where(function (Builder $builder) {
+            $builder->where('servers.owner_id', $this->id)
+                    ->orWhere('subusers.user_id', $this->id);
+        })
+        ->groupBy('servers.id');
+}
+```
+
+### API Keys
+
+Personal API keys created by the user:
+
+```php
+public function apiKeys(): HasMany
+{
+    return $this->hasMany(ApiKey::class)
+        ->where('key_type', ApiKey::TYPE_ACCOUNT);
+}
+```
+
+## Best Practices
+
+1. **Unique Emails**: Each user must have a unique email address
+2. **Strong Passwords**: Encourage users to set strong passwords
+3. **Enable 2FA**: Require 2FA for all administrator accounts
+4. **Regular Audits**: Review user accounts periodically
+5. **Limit Admin Access**: Only grant root_admin to trusted individuals
+6. **External IDs**: Use external_id for billing system integration
+
+## Common Issues
+
+### Email Already Exists
+
+Each email must be unique. If you encounter this error, check for:
+- Duplicate accounts
+- Case-sensitive email variations (all stored as provided)
+
+### Username Conflicts
+
+Usernames are automatically converted to lowercase and must be unique:
+- "User123" becomes "user123"
+- "USER123" becomes "user123" (would conflict)
+
+### Cannot Delete User
+
+Users cannot be deleted if they:
+- Own active servers (transfer ownership first)
+- Are the currently logged-in admin (cannot delete yourself)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Server Management" icon="server" href="/admin/servers">
+    Learn how to create and manage servers for users
+  </Card>
+  
+  <Card title="API Keys" icon="key">
+    Configure API access for users
+  </Card>
+</CardGroup>

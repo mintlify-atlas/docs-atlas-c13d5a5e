@@ -1,0 +1,541 @@
+---
+title: Backup Management
+description: Create, download, restore, and manage server backups
+---
+
+Backups allow you to save snapshots of your server files for safekeeping. You can restore backups to recover from data loss, corruption, or mistakes.
+
+## Creating a Backup
+
+Create a new backup of your server:
+
+```bash Create Backup
+POST /api/client/servers/{server}/backups
+Content-Type: application/json
+
+{
+  "name": "Pre-Update Backup",
+  "is_locked": false,
+  "ignored": "*.log\nnode_modules/\ncache/"
+}
+```
+
+```json Response
+{
+  "object": "backup",
+  "attributes": {
+    "uuid": "3e8e8f18-25fa-4f9e-a13d-4d1c8e8b8f9e",
+    "name": "Pre-Update Backup",
+    "is_successful": false,
+    "is_locked": false,
+    "ignored_files": [
+      "*.log",
+      "node_modules/",
+      "cache/"
+    ],
+    "checksum": null,
+    "bytes": 0,
+    "created_at": "2025-01-15T10:30:00+00:00",
+    "completed_at": null
+  }
+}
+```
+
+<Steps>
+  <Step title="Navigate to Backups">
+    Go to the Backups tab in your server panel.
+  </Step>
+  
+  <Step title="Start Backup">
+    Click "Create Backup" and optionally provide a name.
+  </Step>
+  
+  <Step title="Configure Ignored Files">
+    Specify files/folders to exclude (logs, caches, etc.) to reduce backup size.
+  </Step>
+  
+  <Step title="Wait for Completion">
+    The backup runs in the background. Monitor progress in the backups list.
+  </Step>
+</Steps>
+
+### Backup Process
+
+1. Wings daemon creates a tar.gz archive of server files
+2. Excluded files are skipped based on ignore patterns
+3. Archive is stored locally or uploaded to S3 (based on config)
+4. Checksum is calculated for integrity verification
+5. Backup marked as successful when complete
+
+<Note>
+Backups run in the background and don't interrupt server operation. Large servers may take several minutes.
+</Note>
+
+## Ignoring Files
+
+Exclude files from backups to save space and time:
+
+```text Example Ignored Files
+*.log
+*.tmp
+cache/
+node_modules/
+logs/
+crash-reports/
+backups/
+*.jar.old
+```
+
+Patterns use standard glob syntax:
+- `*.log` - All .log files
+- `cache/` - Entire cache directory
+- `**/temp/*` - Temp directories at any level
+
+<Warning>
+Be careful not to exclude important files. When in doubt, include it in the backup.
+</Warning>
+
+## Listing Backups
+
+View all backups for a server:
+
+```bash List Backups
+GET /api/client/servers/{server}/backups?per_page=20
+```
+
+```json Response
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "backup",
+      "attributes": {
+        "uuid": "3e8e8f18-25fa-4f9e-a13d-4d1c8e8b8f9e",
+        "name": "Pre-Update Backup",
+        "is_successful": true,
+        "is_locked": false,
+        "checksum": "sha256:a1b2c3d4...",
+        "bytes": 456789012,
+        "created_at": "2025-01-15T10:30:00+00:00",
+        "completed_at": "2025-01-15T10:35:42+00:00"
+      }
+    }
+  ],
+  "meta": {
+    "pagination": {
+      "total": 5,
+      "count": 5,
+      "per_page": 20,
+      "current_page": 1,
+      "total_pages": 1
+    },
+    "backup_count": 5
+  }
+}
+```
+
+### Backup Status
+
+- `is_successful: false, completed_at: null` - In progress
+- `is_successful: true, completed_at: set` - Completed successfully
+- `is_successful: false, completed_at: set` - Failed
+
+## Downloading Backups
+
+Get a download link for a backup:
+
+```bash Get Download URL
+GET /api/client/servers/{server}/backups/{backup}/download
+```
+
+```json Response
+{
+  "object": "signed_url",
+  "attributes": {
+    "url": "https://node.example.com:8080/download/backup?token=eyJ0eX..."
+  }
+}
+```
+
+For S3-stored backups:
+
+```json S3 Backup
+{
+  "object": "signed_url",
+  "attributes": {
+    "url": "https://s3.amazonaws.com/bucket/backups/backup.tar.gz?X-Amz-Expires=..."
+  }
+}
+```
+
+<Note>
+Download URLs are valid for 15 minutes. Generate a new URL if it expires.
+</Note>
+
+### Download via cURL
+
+```bash
+curl -L -o backup.tar.gz "https://node.example.com:8080/download/backup?token=eyJ0eX..."
+```
+
+## Restoring Backups
+
+Restore a backup to your server:
+
+```bash Restore Backup
+POST /api/client/servers/{server}/backups/{backup}/restore
+Content-Type: application/json
+
+{
+  "truncate": true
+}
+```
+
+```json Success
+HTTP/1.1 204 No Content
+```
+
+<Warning>
+Restoring a backup with `truncate: true` **deletes all existing server files** before extracting the backup. This cannot be undone.
+</Warning>
+
+### Restore Options
+
+#### Truncate Mode (Clean Restore)
+
+```json
+{
+  "truncate": true
+}
+```
+
+Deletes all files, then extracts backup. Use for full server restoration.
+
+#### Merge Mode
+
+```json
+{
+  "truncate": false
+}
+```
+
+Extracts backup over existing files. Existing files not in backup are kept.
+
+<Steps>
+  <Step title="Confirm Restoration">
+    Ensure you want to restore. This will change server files.
+  </Step>
+  
+  <Step title="Server Goes Offline">
+    The server status changes to `restoring_backup` and becomes inaccessible.
+  </Step>
+  
+  <Step title="Files Extracted">
+    Wings extracts the backup archive to the server directory.
+  </Step>
+  
+  <Step title="Server Available">
+    Status returns to normal when restoration completes. Start the server.
+  </Step>
+</Steps>
+
+### Restoration Requirements
+
+- Server must not be installing or suspended
+- Backup must be completed successfully
+- Server will be inaccessible during restoration
+
+If restoration is attempted on an invalid server:
+
+```json Error Response
+HTTP/1.1 400 Bad Request
+
+{
+  "errors": [
+    {
+      "code": "BadRequestHttpException",
+      "detail": "This server is not currently in a state that allows for a backup to be restored."
+    }
+  ]
+}
+```
+
+## Locking Backups
+
+Locked backups cannot be deleted:
+
+```bash Toggle Lock
+POST /api/client/servers/{server}/backups/{backup}/lock
+```
+
+```json Response
+{
+  "object": "backup",
+  "attributes": {
+    "uuid": "3e8e8f18-25fa-4f9e-a13d-4d1c8e8b8f9e",
+    "is_locked": true
+  }
+}
+```
+
+Lock important backups to prevent accidental deletion:
+- Pre-update backups
+- Known good states
+- Milestone backups
+
+<Note>
+Requires `backup.delete` permission to lock/unlock backups. Users without this permission cannot set locks when creating backups.
+</Note>
+
+## Deleting Backups
+
+Remove a backup permanently:
+
+```bash Delete Backup
+DELETE /api/client/servers/{server}/backups/{backup}
+```
+
+```json Success
+HTTP/1.1 204 No Content
+```
+
+<Warning>
+Deleting a backup is permanent. The backup file is removed from storage and cannot be recovered.
+</Warning>
+
+Locked backups cannot be deleted:
+
+```json Locked Backup Error
+HTTP/1.1 400 Bad Request
+
+{
+  "errors": [
+    {
+      "detail": "Cannot delete a locked backup."
+    }
+  ]
+}
+```
+
+## Backup Limits
+
+Servers have a maximum number of backups:
+
+```bash Check Limit
+GET /api/client/servers/{server}
+```
+
+```json Response
+{
+  "attributes": {
+    "feature_limits": {
+      "backups": 3
+    }
+  }
+}
+```
+
+Attempting to create more than allowed:
+
+```json Error Response
+HTTP/1.1 400 Bad Request
+
+{
+  "errors": [
+    {
+      "code": "TooManyBackupsException",
+      "detail": "This server has reached its backup limit."
+    }
+  ]
+}
+```
+
+<Note>
+Failed backups count toward the limit. Delete failed backups to free up slots.
+</Note>
+
+## Storage Adapters
+
+Backups can be stored in different locations:
+
+### Wings Local Storage
+
+```json
+{
+  "attributes": {
+    "disk": "wings"
+  }
+}
+```
+
+Stored on the node's filesystem. Fast but limited by disk space.
+
+### AWS S3
+
+```json
+{
+  "attributes": {
+    "disk": "s3"
+  }
+}
+```
+
+Stored in Amazon S3 bucket. Unlimited storage, slower uploads.
+
+<Note>
+Storage adapter is configured by administrators. Users cannot choose where backups are stored.
+</Note>
+
+## Automated Backups
+
+Create backups automatically using schedules:
+
+**Schedule:** `0 2 * * *` (Daily at 2 AM)
+
+**Task:**
+```json
+{
+  "action": "backup",
+  "payload": "",
+  "time_offset": 0
+}
+```
+
+See [Task Scheduling](/servers/schedules) for more details.
+
+## Backup Best Practices
+
+<AccordionGroup>
+  <Accordion title="Regular Backup Schedule">
+    Set up automated daily or weekly backups. More frequent backups for active servers:
+    
+    - **Production servers:** Daily backups
+    - **Development servers:** Weekly backups
+    - **Before updates:** Manual backup
+  </Accordion>
+  
+  <Accordion title="Test Restorations">
+    Periodically test restoring backups to ensure they work:
+    
+    1. Download a backup
+    2. Create a test server
+    3. Restore the backup
+    4. Verify files and functionality
+  </Accordion>
+  
+  <Accordion title="Lock Important Backups">
+    Lock backups of known good states:
+    - Before major updates
+    - After successful migrations
+    - Milestone versions
+  </Accordion>
+  
+  <Accordion title="Exclude Unnecessary Files">
+    Reduce backup size and time by excluding:
+    - Log files (`*.log`)
+    - Cache directories
+    - Temporary files
+    - Old backup files
+  </Accordion>
+  
+  <Accordion title="Download Critical Backups">
+    Keep local copies of important backups:
+    ```bash
+    # Download backup
+    curl -o backup-$(date +%Y%m%d).tar.gz "$DOWNLOAD_URL"
+    
+    # Store on external storage
+    cp backup-*.tar.gz /mnt/external/backups/
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Activity Logging
+
+Backup operations are logged:
+
+```json Example Logs
+{
+  "event": "server:backup.start",
+  "properties": {
+    "name": "Pre-Update Backup",
+    "locked": false
+  }
+}
+
+{
+  "event": "server:backup.download",
+  "properties": {
+    "name": "Pre-Update Backup"
+  }
+}
+
+{
+  "event": "server:backup.restore",
+  "properties": {
+    "name": "Pre-Update Backup",
+    "truncate": true
+  }
+}
+
+{
+  "event": "server:backup.delete",
+  "properties": {
+    "name": "Old Backup",
+    "failed": false
+  }
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Backup Fails to Complete">
+    - Check available disk space on node
+    - Verify Wings daemon is running
+    - Review Wings logs for errors
+    - Try excluding more files to reduce size
+    - Check S3 credentials if using S3 storage
+  </Accordion>
+  
+  <Accordion title="Cannot Download Backup">
+    - Verify backup completed successfully
+    - Check network connectivity to node/S3
+    - Generate a new download URL
+    - For S3 backups, verify IAM permissions
+  </Accordion>
+  
+  <Accordion title="Restoration Stuck">
+    - Check Wings daemon status
+    - Review Wings logs for extraction errors
+    - Verify backup file isn't corrupted (checksum)
+    - Ensure sufficient disk space
+    - Contact administrator if issue persists
+  </Accordion>
+  
+  <Accordion title="Backup Limit Reached">
+    You've hit the maximum backups for your server:
+    - Delete old or failed backups
+    - Download important backups before deleting
+    - Request limit increase from admin
+    - Use automated cleanup (delete backups older than X days)
+  </Accordion>
+</AccordionGroup>
+
+## Advanced: Manual Backup Extraction
+
+Backups are standard tar.gz archives:
+
+```bash
+# Extract backup locally
+tar -xzf backup.tar.gz
+
+# List contents without extracting
+tar -tzf backup.tar.gz
+
+# Extract specific file
+tar -xzf backup.tar.gz path/to/file.txt
+
+# Verify integrity
+sha256sum backup.tar.gz
+```

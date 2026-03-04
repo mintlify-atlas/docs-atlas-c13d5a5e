@@ -1,0 +1,198 @@
+---
+title: 'Authentication'
+description: 'Authenticating with the Pterodactyl API'
+---
+
+Pterodactyl uses API keys for authentication. Different API key types provide access to different parts of the API.
+
+## API Key Types
+
+### Application API Keys
+
+Application API keys provide administrative access to the Panel and are used with the Application API.
+
+**Key Prefix**: `ptla_`
+
+**Creating Application Keys**:
+
+1. Navigate to the Admin panel
+2. Go to **Application API** in the sidebar
+3. Click **Create New**
+4. Set permissions for each resource type
+5. Copy the generated key (shown only once)
+
+**Permissions**:
+
+Each Application API key has granular permissions:
+
+- **None** (0) - No access
+- **Read** (1) - Read-only access
+- **Read & Write** (2) - Create and modify
+- **Read, Write & Delete** (3) - Full access
+
+Resources include:
+- Users
+- Nodes
+- Allocations
+- Servers
+- Locations
+- Nests
+- Eggs
+- Database Hosts
+- Server Databases
+
+### Client API Keys
+
+Client API keys provide user-level access and are used with the Client API.
+
+**Key Prefix**: `ptlc_`
+
+**Creating Client Keys**:
+
+1. Go to **Account Settings**
+2. Navigate to **API Credentials**
+3. Click **Create API Key**
+4. Optionally set allowed IP addresses
+5. Provide a description
+6. Copy the generated key (shown only once)
+
+**Permissions**:
+
+Client API keys inherit the permissions of the user who created them. If a user has access to multiple servers, the API key can manage all of them.
+
+**Admin Client Keys**: Client API keys created by administrator accounts can access the Application API endpoints while maintaining client API functionality.
+
+## Making Authenticated Requests
+
+### Using Bearer Token
+
+Include your API key in the `Authorization` header:
+
+```bash
+curl -X GET "https://panel.example.com/api/application/users" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ptla_yourapikeyhere"
+```
+
+### Required Headers
+
+All API requests must include:
+
+```http
+Authorization: Bearer {api_key}
+Accept: application/json
+Content-Type: application/json
+```
+
+## API Key Structure
+
+API keys consist of two parts:
+
+1. **Identifier** (16 characters) - Prefix + random string
+2. **Token** (32 characters) - Encrypted and stored in database
+
+The full key format is: `{prefix}_{identifier}{token}`
+
+**Example**:
+```
+ptla_1234567890abcdef0123456789abcdef0123456789abcdef
+     ^^^^^^^^^^^^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      Identifier              Token
+```
+
+## IP Restrictions
+
+Client API keys support IP address restrictions:
+
+- Specify allowed IP addresses (comma-separated)
+- Supports CIDR notation (e.g., `192.168.1.0/24`)
+- Leave blank to allow all IPs
+
+**Example Configuration**:
+```json
+{
+  "allowed_ips": [
+    "192.168.1.100",
+    "10.0.0.0/8"
+  ]
+}
+```
+
+## Key Expiration
+
+API keys can be configured with an expiration date:
+
+- Set `expires_at` timestamp when creating keys
+- Expired keys will be rejected automatically
+- Keys track last usage via `last_used_at` field
+
+## Security Best Practices
+
+<Warning>
+  API keys provide full access to your Panel or account. Treat them like passwords.
+</Warning>
+
+1. **Never commit API keys to version control**
+2. **Use environment variables** to store keys
+3. **Rotate keys regularly**, especially after team member changes
+4. **Use IP restrictions** when possible
+5. **Grant minimum required permissions** for Application API keys
+6. **Delete unused keys** immediately
+7. **Monitor key usage** via `last_used_at` field
+8. **Set expiration dates** for temporary integrations
+
+## Key Limits
+
+Users are limited to **25 API keys** per account to prevent abuse.
+
+## Example: Creating a Server
+
+```bash
+curl -X POST "https://panel.example.com/api/application/servers" \
+  -H "Authorization: Bearer ptla_yourapikeyhere" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My Game Server",
+    "user": 1,
+    "egg": 1,
+    "docker_image": "quay.io/pterodactyl/core:java",
+    "startup": "java -Xms128M -Xmx1024M -jar server.jar",
+    "environment": {},
+    "limits": {
+      "memory": 1024,
+      "swap": 0,
+      "disk": 5120,
+      "io": 500,
+      "cpu": 100
+    },
+    "feature_limits": {
+      "databases": 1,
+      "backups": 1
+    },
+    "allocation": {
+      "default": 1
+    }
+  }'
+```
+
+## Troubleshooting
+
+### 401 Unauthorized
+
+- Verify the API key is correct
+- Check that the key hasn't expired
+- Ensure proper `Authorization` header format
+
+### 403 Forbidden
+
+- For Application API: Check resource permissions
+- For Client API: Verify access to the requested server
+- Check IP restrictions if configured
+
+### Invalid API Key Format
+
+- Ensure no extra spaces or line breaks
+- Verify the correct prefix (`ptla_` or `ptlc_`)
+- Check that the full key was copied

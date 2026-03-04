@@ -1,0 +1,461 @@
+---
+title: 'Database Migrations'
+description: 'Managing database migrations in Pterodactyl Panel'
+---
+
+Pterodactyl uses Laravel's migration system to manage database schema changes. This guide covers running, creating, and troubleshooting migrations.
+
+## What are Migrations?
+
+Migrations are version control for your database schema. They allow you to:
+
+- Define database structure changes in PHP code
+- Roll back changes if needed
+- Share schema changes across environments
+- Track database version history
+
+## Running Migrations
+
+### Initial Installation
+
+During first-time setup, run all migrations:
+
+```bash
+php artisan migrate --seed --force
+```
+
+**Flags**:
+- `--seed`: Run database seeders after migrations
+- `--force`: Required in production (bypasses confirmation)
+
+### Updating Panel
+
+When updating Pterodactyl, run migrations to apply schema changes:
+
+```bash
+cd /var/www/pterodactyl
+php artisan down
+
+# Update code (git pull, composer install, etc.)
+
+php artisan migrate --force
+php artisan view:clear
+php artisan config:clear
+php artisan up
+```
+
+### Auto-Upgrade (v1.3.0+)
+
+Pterodactyl v1.3.0+ includes self-upgrade functionality:
+
+```bash
+php artisan p:upgrade
+```
+
+This automatically:
+1. Backs up the current installation
+2. Downloads the latest release
+3. Runs migrations with `--force` and `--seed`
+4. Clears caches
+
+## Migration Status
+
+Check which migrations have been run:
+
+```bash
+php artisan migrate:status
+```
+
+Output:
+```
++------+----------------------------------------------------+-------+
+| Ran? | Migration                                          | Batch |
++------+----------------------------------------------------+-------+
+| Yes  | 2017_09_10_225941_CreateSchedulesTable            | 1     |
+| Yes  | 2017_09_10_230309_CreateNewTasksTableForSchedules | 1     |
+| Yes  | 2021_01_17_152623_add_generic_server_status_column| 1     |
+| No   | 2024_07_13_091852_clear_unused_allocation_notes   |       |
++------+----------------------------------------------------+-------+
+```
+
+## Common Migrations
+
+### Server State Management
+
+**2021_01_17_152623_add_generic_server_status_column**
+
+Added unified `status` column to replace multiple state columns:
+
+```php
+Schema::table('servers', function (Blueprint $table) {
+    $table->string('status')->default('installing')->after('suspended');
+});
+```
+
+Possible statuses:
+- `installing`
+- `install_failed`
+- `reinstall_failed`
+- `suspended`
+- `restoring_backup`
+- `null` (normal operation)
+
+### API Key Enhancements
+
+**2023_02_23_191004_add_expires_at_column_to_api_keys_table**
+
+Added expiration support for API keys:
+
+```php
+Schema::table('api_keys', function (Blueprint $table) {
+    $table->timestamp('expires_at')->nullable()->after('last_used_at');
+});
+```
+
+**2022_06_18_112822_track_api_key_usage_for_activity_events**
+
+Links activity logs to API keys:
+
+```php
+Schema::table('activity_logs', function (Blueprint $table) {
+    $table->unsignedInteger('api_key_id')->nullable()->after('actor_id');
+});
+```
+
+### Backup Features
+
+**2021_05_03_201016_add_support_for_locking_a_backup**
+
+Added backup locking to prevent deletion:
+
+```php
+Schema::table('backups', function (Blueprint $table) {
+    $table->boolean('is_locked')->default(false);
+});
+```
+
+**2020_12_26_184914_add_upload_id_column_to_backups_table**
+
+Added support for S3 multipart uploads:
+
+```php
+Schema::table('backups', function (Blueprint $table) {
+    $table->text('upload_id')->nullable()->after('disk');
+});
+```
+
+### Server Transfers
+
+**2020_04_04_131016_add_table_server_transfers**
+
+Created table for tracking server transfers:
+
+```php
+Schema::create('server_transfers', function (Blueprint $table) {
+    $table->increments('id');
+    $table->unsignedInteger('server_id');
+    $table->boolean('successful')->nullable();
+    $table->unsignedInteger('old_node');
+    $table->unsignedInteger('new_node');
+    $table->unsignedInteger('old_allocation');
+    $table->unsignedInteger('new_allocation');
+    $table->json('old_additional_allocations')->nullable();
+    $table->json('new_additional_allocations')->nullable();
+    $table->timestamps();
+});
+```
+
+### Schedule Improvements
+
+**2021_01_13_013420_add_cron_month**
+
+Added month field to schedule cron:
+
+```php
+Schema::table('schedules', function (Blueprint $table) {
+    $table->string('cron_month', 191)->default('*')->after('cron_day_of_week');
+});
+```
+
+**2021_05_01_092523_add_only_run_when_server_online_option_to_schedules**
+
+Added conditional execution:
+
+```php
+Schema::table('schedules', function (Blueprint $table) {
+    $table->boolean('only_when_online')->default(false);
+});
+```
+
+## Creating Custom Migrations
+
+<Warning>
+  Only create custom migrations if you're developing Panel modifications. Do not modify core migrations.
+</Warning>
+
+### Generate Migration
+
+```bash
+php artisan make:migration add_custom_field_to_servers_table
+```
+
+### Migration Structure
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('servers', function (Blueprint $table) {
+            $table->string('custom_field')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('servers', function (Blueprint $table) {
+            $table->dropColumn('custom_field');
+        });
+    }
+};
+```
+
+### Common Schema Operations
+
+**Add Column**:
+```php
+$table->string('column_name')->nullable();
+$table->integer('count')->default(0);
+$table->text('description')->after('name');
+```
+
+**Modify Column**:
+```php
+$table->string('name', 500)->change();
+$table->integer('value')->unsigned()->change();
+```
+
+**Drop Column**:
+```php
+$table->dropColumn('column_name');
+$table->dropColumn(['col1', 'col2']);
+```
+
+**Add Index**:
+```php
+$table->index('email');
+$table->unique('username');
+$table->foreign('user_id')->references('id')->on('users');
+```
+
+**Drop Index**:
+```php
+$table->dropIndex('users_email_index');
+$table->dropUnique('users_username_unique');
+$table->dropForeign('servers_user_id_foreign');
+```
+
+## Rollback Migrations
+
+<Warning>
+  Rolling back migrations can cause data loss. Always backup your database first.
+</Warning>
+
+### Rollback Last Batch
+
+```bash
+php artisan migrate:rollback
+```
+
+### Rollback Specific Steps
+
+```bash
+# Rollback last 3 migration batches
+php artisan migrate:rollback --step=3
+```
+
+### Rollback All
+
+```bash
+php artisan migrate:reset
+```
+
+### Rollback and Re-run
+
+```bash
+php artisan migrate:refresh
+
+# With seeding
+php artisan migrate:refresh --seed
+```
+
+## Migration Best Practices
+
+### 1. Always Backup First
+
+```bash
+mysqldump -u root -p panel > backup_$(date +%Y%m%d_%H%M%S).sql
+```
+
+### 2. Test in Development
+
+Never run untested migrations in production:
+
+```bash
+# In development
+php artisan migrate
+php artisan migrate:rollback
+php artisan migrate
+```
+
+### 3. Use Transactions
+
+For complex migrations:
+
+```php
+DB::transaction(function () {
+    // Migration operations
+});
+```
+
+### 4. Handle Data Migration
+
+When changing column types, migrate existing data:
+
+```php
+public function up(): void
+{
+    // Add new column
+    Schema::table('servers', function (Blueprint $table) {
+        $table->string('status_new')->nullable();
+    });
+    
+    // Migrate data
+    DB::table('servers')->where('installing', true)
+        ->update(['status_new' => 'installing']);
+    
+    // Drop old column
+    Schema::table('servers', function (Blueprint $table) {
+        $table->dropColumn('installing');
+    });
+    
+    // Rename new column
+    Schema::table('servers', function (Blueprint $table) {
+        $table->renameColumn('status_new', 'status');
+    });
+}
+```
+
+## Troubleshooting
+
+### "Nothing to migrate"
+
+All migrations are already run. Check status:
+
+```bash
+php artisan migrate:status
+```
+
+### "Syntax error or access violation"
+
+Database user lacks required permissions:
+
+```sql
+GRANT ALL PRIVILEGES ON panel.* TO 'pterodactyl'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+### "SQLSTATE[42S01]: Base table or view already exists"
+
+Migration already partially applied. Options:
+
+1. Rollback and retry
+2. Manually mark as run:
+
+```bash
+php artisan migrate:rollback --step=1
+php artisan migrate
+```
+
+### "Class not found" errors
+
+Clear autoload cache:
+
+```bash
+composer dump-autoload
+php artisan config:clear
+```
+
+### "Migration table not found"
+
+Database not initialized. Run:
+
+```bash
+php artisan migrate:install
+php artisan migrate
+```
+
+### MySQL 8 Compatibility
+
+If encountering errors with MySQL 8:
+
+```sql
+-- Use native password authentication
+ALTER USER 'pterodactyl'@'localhost' 
+    IDENTIFIED WITH mysql_native_password BY 'password';
+```
+
+### MariaDB Compatibility
+
+Some migrations may fail on MariaDB < 10.5. Upgrade to 10.5+ or use MySQL 8.
+
+## Database Maintenance
+
+### Optimize Tables
+
+```bash
+php artisan db:optimize
+```
+
+### Repair Tables
+
+```sql
+REPAIR TABLE servers;
+REPAIR TABLE allocations;
+```
+
+### Check Table Status
+
+```sql
+CHECK TABLE servers;
+CHECK TABLE api_keys;
+```
+
+## Migration History
+
+Key migration milestones:
+
+- **v1.11.0**: Added activity logging tables
+- **v1.8.0**: Changed egg format to PTDL_v2
+- **v1.6.0**: Added server transfer support
+- **v1.3.0**: Unified server status column
+- **v1.0.0**: Complete database restructure
+- **v0.7.x**: Legacy structure (pre-1.0)
+
+## Further Reading
+
+- [Laravel Migrations Documentation](https://laravel.com/docs/migrations)
+- [Pterodactyl Changelog](https://github.com/pterodactyl/panel/blob/1.0-develop/CHANGELOG.md)
+- [Database Schema Reference](https://github.com/pterodactyl/panel/tree/develop/database/migrations)

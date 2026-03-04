@@ -1,0 +1,512 @@
+---
+title: Nests and Eggs
+description: Understanding and managing game server configurations with Nests and Eggs
+---
+
+Nests and Eggs are the core configuration system in Pterodactyl that define how different game servers are installed and run. Understanding this system is crucial for customizing and adding new game types.
+
+## Concept Overview
+
+### Nests
+
+A **Nest** is a collection of related eggs, typically grouped by game type or server software:
+
+- **Minecraft**: All Minecraft-related servers
+- **Source Engine**: Valve Source games (CS:GO, TF2, Garry's Mod)
+- **Voice Servers**: TeamSpeak, Discord bots
+- **Generic**: Generic applications and software
+
+### Eggs
+
+An **Egg** is a specific server configuration within a nest:
+
+- **Minecraft Nest** → Vanilla, Paper, Forge, Spigot eggs
+- **Source Engine Nest** → CS:GO, TF2, L4D2 eggs
+
+Eggs define:
+- Docker images to use
+- Installation scripts
+- Startup commands
+- Configuration files
+- Environment variables
+
+## Nest Structure
+
+From `app/Models/Nest.php:38-41`:
+
+```php
+protected $fillable = [
+    'name',
+    'description',
+];
+```
+
+### Nest Validation
+
+From `app/Models/Nest.php:43-47`:
+
+```php
+public static array $validationRules = [
+    'author' => 'required|string|email',
+    'name' => 'required|string|max:191',
+    'description' => 'nullable|string',
+];
+```
+
+## Egg Structure
+
+Eggs are complex configurations (from `app/Models/Egg.php:90-108`):
+
+```php
+protected $fillable = [
+    'name',
+    'description',
+    'features',             // Array of enabled features
+    'docker_images',        // Available Docker images
+    'force_outgoing_ip',    // Force container to use node IP
+    'file_denylist',        // Files users cannot edit
+    'config_files',         // Configuration file parsing rules
+    'config_startup',       // Startup configuration
+    'config_logs',          // Log file location
+    'config_stop',          // Stop command
+    'config_from',          // Inherit config from another egg
+    'startup',              // Startup command template
+    'script_is_privileged', // Run install script as privileged
+    'script_install',       // Installation script
+    'script_entry',         // Entrypoint script
+    'script_container',     // Container for installation
+    'copy_script_from',     // Copy scripts from another egg
+];
+```
+
+## Managing Nests
+
+### Creating a Nest
+
+<Steps>
+  <Step title="Navigate to Nests">
+    Go to **Admin Panel** → **Nests** → **Create New**
+  </Step>
+  
+  <Step title="Fill in Details">
+    **Nest Information**
+    - **Name**: Descriptive name (e.g., "Minecraft", "Source Engine")
+    - **Description**: Optional description of the nest
+    - **Author**: Email address of the creator
+  </Step>
+  
+  <Step title="Create Nest">
+    Click **Create** to save the nest
+  </Step>
+</Steps>
+
+### Viewing a Nest
+
+Clicking on a nest shows:
+
+- All eggs in the nest
+- Number of servers using each egg
+- Ability to create new eggs
+- Import/export functionality
+
+From `app/Http/Controllers/Admin/Nests/NestController.php:69-74`:
+
+```php
+public function view(int $nest): View
+{
+    return view('admin.nests.view', [
+        'nest' => $this->repository->getWithEggServers($nest),
+    ]);
+}
+```
+
+### Deleting a Nest
+
+<Warning>
+You cannot delete a nest that has servers using any of its eggs. Delete or migrate all servers first.
+</Warning>
+
+## Managing Eggs
+
+### Creating an Egg
+
+<Steps>
+  <Step title="Navigate to Nest">
+    Click on the nest where you want to add an egg
+  </Step>
+  
+  <Step title="Click Create New Egg">
+    Select **Create New Egg** button
+  </Step>
+  
+  <Step title="Basic Information">
+    **Egg Details**
+    - **Name**: Egg name (e.g., "Paper", "Vanilla")
+    - **Description**: What this egg provides
+    - **Author**: Your email address
+  </Step>
+  
+  <Step title="Docker Configuration">
+    **Docker Images**
+    
+    Specify available Docker images (one per line):
+    ```
+    ghcr.io/pterodactyl/yolks:java_17
+    Java 8|ghcr.io/pterodactyl/yolks:java_8
+    Java 11|ghcr.io/pterodactyl/yolks:java_11
+    ```
+    
+    Format: `Display Name|image:tag` or just `image:tag`
+  </Step>
+  
+  <Step title="Startup Configuration">
+    **Startup Command**
+    
+    Define the command to start the server:
+    ```bash
+    java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}
+    ```
+    
+    Use `{{VARIABLE}}` for environment variables
+  </Step>
+  
+  <Step title="Configuration Files">
+    **Config Parsing** (JSON)
+    
+    Define how config files should be parsed:
+    ```json
+    {
+        "server.properties": {
+            "parser": "properties",
+            "find": {
+                "server-ip": "0.0.0.0",
+                "server-port": "{{server.build.default.port}}"
+            }
+        }
+    }
+    ```
+  </Step>
+  
+  <Step title="Stop Configuration">
+    Define the stop command:
+    ```
+    stop
+    ```
+    
+    Or for graceful shutdown:
+    ```
+    ^C
+    ```
+  </Step>
+  
+  <Step title="Install Script">
+    **Installation Script** (Bash)
+    
+    Create a script to install the server:
+    ```bash
+    #!/bin/bash
+    cd /mnt/server
+    
+    DOWNLOAD_URL=https://example.com/server.jar
+    curl -sSL ${DOWNLOAD_URL} -o server.jar
+    ```
+  </Step>
+  
+  <Step title="Environment Variables">
+    Add variables users can configure (next section)
+  </Step>
+  
+  <Step title="Create Egg">
+    Click **Create** to save the egg
+  </Step>
+</Steps>
+
+### Docker Image Format
+
+From `app/Http/Controllers/Admin/Nests/EggController.php:114-127`:
+
+```php
+protected function normalizeDockerImages(?string $input = null): array
+{
+    $data = array_map(fn ($value) => trim($value), explode("\n", $input ?? ''));
+
+    $images = [];
+    foreach ($data as $value) {
+        $parts = explode('|', $value, 2);
+        $images[$parts[0]] = empty($parts[1]) ? $parts[0] : $parts[1];
+    }
+
+    return $images;
+}
+```
+
+## Egg Variables
+
+Variables allow users to customize their servers. Each variable has:
+
+- **Name**: Display name
+- **Description**: Help text
+- **Environment Variable**: The `{{VAR_NAME}}` used in configs
+- **Default Value**: Pre-filled value
+- **User Viewable**: Can users see this variable?
+- **User Editable**: Can users change this variable?
+- **Validation Rules**: Laravel validation rules
+
+### Creating a Variable
+
+<Steps>
+  <Step title="Navigate to Egg Variables">
+    Click on an egg, then go to **Variables** tab
+  </Step>
+  
+  <Step title="Add New Variable">
+    Click **New Variable**
+  </Step>
+  
+  <Step title="Configure Variable">
+    **Variable Settings**
+    - **Name**: `Server Version`
+    - **Description**: `Which server version to install`
+    - **Environment Variable**: `SERVER_VERSION`
+    - **Default Value**: `latest`
+    - **Validation Rules**: `required|string|max:20`
+    - **User Viewable**: Yes
+    - **User Editable**: Yes
+  </Step>
+  
+  <Step title="Save Variable">
+    Click **Create Variable**
+  </Step>
+</Steps>
+
+### Variable Usage
+
+Variables can be used in:
+
+- **Startup Command**: `java -jar {{SERVER_JARFILE}}`
+- **Install Script**: `VERSION={{SERVER_VERSION}}`
+- **Config Files**: Parsed and replaced automatically
+
+## Configuration Inheritance
+
+Eggs can inherit configuration from other eggs:
+
+### Config Inheritance
+
+Set `config_from` to another egg's ID to inherit:
+
+- Configuration file parsing
+- Startup configuration  
+- Log configuration
+- Stop command
+
+From `app/Models/Egg.php:197-204`:
+
+```php
+public function getInheritConfigFilesAttribute(): ?string
+{
+    if (!is_null($this->config_files) || is_null($this->config_from)) {
+        return $this->config_files;
+    }
+
+    return $this->configFrom->config_files;
+}
+```
+
+### Script Inheritance
+
+Set `copy_script_from` to copy installation scripts from another egg.
+
+<Note>
+Inheritance is useful for creating variations of existing eggs without duplicating configuration.
+</Note>
+
+## Egg Features
+
+Special features can be enabled (from `app/Models/Egg.php:79-80`):
+
+```php
+public const FEATURE_EULA_POPUP = 'eula';
+public const FEATURE_FASTDL = 'fastdl';
+```
+
+### EULA Feature
+
+For Minecraft servers:
+
+```json
+{
+    "features": ["eula"]
+}
+```
+
+Shows a EULA acceptance popup during server creation.
+
+### FastDL Feature
+
+For Source Engine servers:
+
+```json
+{
+    "features": ["fastdl"]
+}
+```
+
+Enables FastDL configuration options.
+
+## File Denylist
+
+Prevent users from editing sensitive files:
+
+```json
+[
+    "server.properties",
+    "ops.json",
+    "whitelist.json"
+]
+```
+
+Users can view but not edit these files.
+
+## Importing Eggs
+
+You can import eggs from JSON files:
+
+<Steps>
+  <Step title="Get Egg JSON">
+    Download egg from:
+    - [Pterodactyl Eggs Repo](https://github.com/parkervcp/eggs)
+    - Export from another Panel
+    - Create custom JSON
+  </Step>
+  
+  <Step title="Navigate to Nest">
+    Go to the nest where you want to import
+  </Step>
+  
+  <Step title="Import Egg">
+    Click **Import Egg** and upload the JSON file
+  </Step>
+  
+  <Step title="Verify Configuration">
+    Review the imported egg settings and adjust as needed
+  </Step>
+</Steps>
+
+## Exporting Eggs
+
+To share eggs with others:
+
+<Steps>
+  <Step title="Navigate to Egg">
+    Click on the egg you want to export
+  </Step>
+  
+  <Step title="Export">
+    Look for the export option
+  </Step>
+  
+  <Step title="Save JSON">
+    Download the JSON file
+  </Step>
+</Steps>
+
+The export version is defined as (from `app/Models/Egg.php:68`):
+
+```php
+public const EXPORT_VERSION = 'PTDL_v2';
+```
+
+## Install Script Container
+
+The installation script runs in a separate container:
+
+- **script_container**: Docker image for installation
+- **script_entry**: Entrypoint command (usually `bash`)
+- **script_is_privileged**: Run as privileged container
+
+Common install containers:
+
+```
+ghcr.io/pterodactyl/installers:alpine
+ghcr.io/pterodactyl/installers:debian
+```
+
+## Configuration Parsers
+
+Supported configuration file parsers:
+
+- **properties**: Java .properties files
+- **file**: Simple find/replace
+- **yaml**: YAML configuration
+- **json**: JSON configuration
+- **ini**: INI files
+
+## Best Practices
+
+1. **Use Inheritance**: Don't duplicate configurations
+2. **Validate Variables**: Always add validation rules
+3. **Clear Descriptions**: Help users understand variables
+4. **Test Thoroughly**: Test eggs before deploying to production
+5. **Use Official Images**: Prefer [pterodactyl/yolks](https://github.com/pterodactyl/yolks)
+6. **Version Control**: Keep egg JSON files in version control
+7. **Document Changes**: Add update notes when modifying eggs
+
+## Common Eggs Repository
+
+The community maintains eggs at:
+
+[https://github.com/parkervcp/eggs](https://github.com/parkervcp/eggs)
+
+This includes eggs for:
+
+- Minecraft (Vanilla, Paper, Forge, Fabric, Bedrock)
+- Source Engine (CS:GO, TF2, Garry's Mod)
+- Voice Servers (TeamSpeak, Mumble)
+- Discord Bots
+- Game Servers (Rust, ARK, Valheim)
+- And many more
+
+## Troubleshooting
+
+### Install Failed
+
+**Problem**: Server installation fails
+
+**Solutions**:
+1. Check install script logs
+2. Verify Docker image is accessible
+3. Test install script locally
+4. Check variable values are correct
+
+### Server Won't Start
+
+**Problem**: Server starts but immediately stops
+
+**Solutions**:
+1. Check startup command syntax
+2. Verify environment variables
+3. Review server logs
+4. Test Docker image manually
+
+### Config Not Updating
+
+**Problem**: Configuration changes don't apply
+
+**Solutions**:
+1. Verify config_files JSON is valid
+2. Check file paths are correct
+3. Ensure parser is appropriate for file type
+4. Test parsing rules
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Server Creation" icon="server" href="/admin/servers">
+    Deploy servers using your eggs
+  </Card>
+  
+  <Card title="Mounts" icon="folder-open" href="/admin/mounts">
+    Share files across servers with mounts
+  </Card>
+</CardGroup>

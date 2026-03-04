@@ -1,0 +1,441 @@
+---
+title: Database Host Management
+description: Configuring MySQL/MariaDB database servers for game servers
+---
+
+Database hosts allow game servers to create and use MySQL/MariaDB databases. Many games and plugins require databases for storing player data, statistics, and configurations.
+
+## What are Database Hosts?
+
+A database host is a MySQL or MariaDB server that Pterodactyl can connect to for creating databases. From `app/Models/DatabaseHost.php:46-49`:
+
+```php
+protected $fillable = [
+    'name', 'host', 'port', 'username', 'password', 'max_databases', 'node_id',
+];
+```
+
+### Database Host Properties
+
+- **Name**: Friendly identifier
+- **Host**: Hostname or IP address of the MySQL server
+- **Port**: MySQL port (usually 3306)
+- **Username**: MySQL user with database creation privileges
+- **Password**: Password for the MySQL user
+- **Max Databases**: Maximum databases this host can create (optional limit)
+- **Node**: Optional node assignment (restricts to specific node)
+
+## Creating a Database Host
+
+<Steps>
+  <Step title="Navigate to Database Hosts">
+    Go to **Admin Panel** → **Databases**
+  </Step>
+  
+  <Step title="Configure Connection">
+    **Database Server Details**
+    - **Name**: Descriptive name (e.g., "Primary MySQL", "Node1-DB")
+    - **Host**: MySQL server hostname or IP
+    - **Port**: MySQL port (default: `3306`)
+    - **Username**: MySQL user with GRANT privileges
+    - **Password**: MySQL user password
+  </Step>
+  
+  <Step title="Set Limits (Optional)">
+    **Resource Limits**
+    - **Max Databases**: Limit total databases (leave empty for unlimited)
+    - **Linked Node**: Associate with specific node (optional)
+  </Step>
+  
+  <Step title="Test and Create">
+    Click **Create**
+    
+    The Panel will test the connection before saving.
+  </Step>
+</Steps>
+
+## Validation Rules
+
+From `app/Models/DatabaseHost.php:63-70`:
+
+```php
+public static array $validationRules = [
+    'name' => 'required|string|max:191',
+    'host' => 'required|string|regex:/^[\w\-\.]+$/',
+    'port' => 'required|numeric|between:1,65535',
+    'username' => 'required|string|max:32',
+    'password' => 'nullable|string',
+    'node_id' => 'sometimes|nullable|integer|exists:nodes,id',
+];
+```
+
+## Connection Testing
+
+When creating or updating a database host, the Panel tests the connection.
+
+From `app/Http/Controllers/Admin/DatabaseController.php:64-78`:
+
+```php
+public function create(DatabaseHostFormRequest $request): RedirectResponse
+{
+    try {
+        $host = $this->creationService->handle($request->normalize());
+    } catch (\Exception $exception) {
+        if ($exception instanceof \PDOException || $exception->getPrevious() instanceof \PDOException) {
+            $this->alert->danger(
+                sprintf('There was an error while trying to connect to the host or while executing a query: "%s"', $exception->getMessage())
+            )->flash();
+
+            return redirect()->route('admin.databases')->withInput($request->validated());
+        } else {
+            throw $exception;
+        }
+    }
+    // ...
+}
+```
+
+<Note>
+If the connection test fails, the database host will not be created and an error message will be displayed.
+</Note>
+
+## MySQL User Requirements
+
+The MySQL user must have these privileges:
+
+```sql
+GRANT SELECT, CREATE, ALTER, INDEX, DROP, INSERT, UPDATE, DELETE, 
+      CREATE VIEW, REFERENCES, CREATE ROUTINE, ALTER ROUTINE, 
+      EXECUTE, EVENT, TRIGGER 
+      ON `s%`.* TO 'pterodactyl'@'%' WITH GRANT OPTION;
+```
+
+### Creating a MySQL User
+
+On your MySQL server:
+
+```sql
+-- Create user
+CREATE USER 'pterodactyl'@'%' IDENTIFIED BY 'strong_password';
+
+-- Grant privileges for Pterodactyl-managed databases
+GRANT SELECT, CREATE, ALTER, INDEX, DROP, INSERT, UPDATE, DELETE, 
+      CREATE VIEW, REFERENCES, CREATE ROUTINE, ALTER ROUTINE, 
+      EXECUTE, EVENT, TRIGGER 
+      ON `s%_*`.* TO 'pterodactyl'@'%' WITH GRANT OPTION;
+
+-- Apply changes
+FLUSH PRIVILEGES;
+```
+
+<Warning>
+The `s%_*` pattern matches databases created by Pterodactyl. Do not grant access to all databases.
+</Warning>
+
+## Database Naming Convention
+
+Pterodactyl creates databases with the pattern:
+
+```
+s{server_id}_{database_name}
+```
+
+Example:
+- Server ID: 42
+- Database name: "playerdata"
+- Result: `s42_playerdata`
+
+This prevents conflicts between servers.
+
+## Node Assignment
+
+You can link a database host to a specific node:
+
+### Linked to Node
+
+- Only servers on that node can use this database host
+- Useful for local MySQL servers on each node
+- Better performance (reduced latency)
+
+### Not Linked (Global)
+
+- Any server can use this database host
+- Useful for centralized database servers
+- Easier to manage, fewer database hosts needed
+
+<Note>
+Node assignment is optional. Leave empty to make the database host available to all servers.
+</Note>
+
+## Viewing Database Hosts
+
+The database hosts page displays:
+
+- Host name and connection details
+- Number of databases created
+- Maximum database limit (if set)
+- Associated node (if linked)
+
+## Managing a Database Host
+
+### Viewing Details
+
+Click on a database host to see:
+
+- All databases created on this host
+- Associated servers
+- Connection information
+- Current database count vs. limit
+
+### Updating a Host
+
+<Steps>
+  <Step title="Navigate to Host">
+    Click on the database host you want to edit
+  </Step>
+  
+  <Step title="Modify Settings">
+    Update any of:
+    - Name
+    - Host/port
+    - Username/password
+    - Max databases
+    - Node assignment
+  </Step>
+  
+  <Step title="Save Changes">
+    Click **Update**
+    
+    Connection will be tested again.
+  </Step>
+</Steps>
+
+From `app/Http/Controllers/Admin/DatabaseController.php:90-111`:
+
+```php
+public function update(DatabaseHostFormRequest $request, DatabaseHost $host): RedirectResponse
+{
+    $redirect = redirect()->route('admin.databases.view', $host->id);
+
+    try {
+        $this->updateService->handle($host->id, $request->normalize());
+        $this->alert->success('Database host was updated successfully.')->flash();
+    } catch (\Exception $exception) {
+        if ($exception instanceof \PDOException || $exception->getPrevious() instanceof \PDOException) {
+            $this->alert->danger(
+                sprintf('There was an error while trying to connect to the host or while executing a query: "%s"', $exception->getMessage())
+            )->flash();
+
+            return $redirect->withInput($request->normalize());
+        } else {
+            throw $exception;
+        }
+    }
+
+    return $redirect;
+}
+```
+
+### Deleting a Host
+
+<Warning>
+You cannot delete a database host that has active databases. Delete all databases first, or reassign them to another host.
+</Warning>
+
+<Steps>
+  <Step title="Remove Databases">
+    Delete all databases on this host, or migrate them
+  </Step>
+  
+  <Step title="Delete Host">
+    Navigate to the host and click **Delete**
+  </Step>
+  
+  <Step title="Confirm Deletion">
+    Confirm you want to delete the database host
+  </Step>
+</Steps>
+
+## Database Relationships
+
+From `app/Models/DatabaseHost.php:77-90`:
+
+### Node Relationship
+
+```php
+public function node(): BelongsTo
+{
+    return $this->belongsTo(Node::class);
+}
+```
+
+### Databases Relationship
+
+```php
+public function databases(): HasMany
+{
+    return $this->hasMany(Database::class);
+}
+```
+
+## Server Database Creation
+
+When a server owner creates a database:
+
+1. They choose a database name
+2. System selects an available database host
+3. Database is created as `s{server_id}_{name}`
+4. Credentials are generated and displayed once
+5. Database is accessible from the server container
+
+## Remote Access Configuration
+
+For MySQL to accept remote connections:
+
+### Edit MySQL Configuration
+
+```ini
+# /etc/mysql/mysql.conf.d/mysqld.cnf or /etc/my.cnf
+[mysqld]
+bind-address = 0.0.0.0
+```
+
+### Restart MySQL
+
+```bash
+systemctl restart mysql
+# or
+systemctl restart mariadb
+```
+
+### Configure Firewall
+
+```bash
+# UFW
+ufw allow 3306/tcp
+
+# iptables
+iptables -A INPUT -p tcp --dport 3306 -j ACCEPT
+```
+
+<Warning>
+Only allow MySQL access from trusted IPs. Never expose MySQL to the public internet without restrictions.
+</Warning>
+
+## Best Practices
+
+1. **Use Strong Passwords**: Generate strong passwords for MySQL users
+2. **Limit Access**: Use `node_id` to restrict hosts to specific nodes
+3. **Set Max Databases**: Prevent resource exhaustion with limits
+4. **Regular Backups**: Back up databases regularly
+5. **Monitor Usage**: Check database count vs. limits
+6. **Secure Connections**: Use SSL for MySQL connections if possible
+7. **Local is Better**: Use local MySQL on each node for better performance
+
+## Local vs. Remote Database Hosts
+
+### Local Database Host (Same Server as Node)
+
+**Pros**:
+- Lower latency
+- Better performance
+- No network dependency
+- More secure (no remote connections)
+
+**Cons**:
+- Need MySQL on each node
+- More hosts to manage
+- Resources used on game server nodes
+
+### Remote Database Host (Dedicated Server)
+
+**Pros**:
+- Centralized management
+- Dedicated resources
+- Easier backups
+- Single point of configuration
+
+**Cons**:
+- Network latency
+- Single point of failure
+- Network bandwidth usage
+- Security considerations
+
+## Troubleshooting
+
+### Connection Failed
+
+**Problem**: Cannot connect to MySQL server
+
+**Solutions**:
+1. Verify MySQL is running
+2. Check hostname/IP is correct
+3. Ensure MySQL accepts remote connections (`bind-address`)
+4. Verify firewall allows port 3306
+5. Test connection manually:
+   ```bash
+   mysql -h HOST -P 3306 -u USERNAME -p
+   ```
+
+### Permission Denied
+
+**Problem**: User doesn't have required privileges
+
+**Solutions**:
+1. Grant proper privileges (see MySQL User Requirements)
+2. Ensure user can connect from Panel's IP:
+   ```sql
+   GRANT ... ON `s%_*`.* TO 'pterodactyl'@'PANEL_IP' WITH GRANT OPTION;
+   ```
+3. Flush privileges:
+   ```sql
+   FLUSH PRIVILEGES;
+   ```
+
+### Max Databases Reached
+
+**Problem**: Cannot create more databases
+
+**Solutions**:
+1. Increase `max_databases` limit
+2. Delete unused databases
+3. Add another database host
+
+### Slow Database Performance
+
+**Problem**: Servers experiencing database lag
+
+**Solutions**:
+1. Use local database hosts on each node
+2. Optimize MySQL configuration
+3. Add more RAM to database server
+4. Enable query caching
+5. Use faster storage (SSD)
+
+## Security Considerations
+
+### Network Security
+
+1. **Restrict Access**: Only allow connections from node IPs
+2. **Use Firewalls**: Block port 3306 from untrusted sources
+3. **Consider SSL**: Use encrypted MySQL connections
+4. **Private Network**: Use internal network for node-to-database communication
+
+### User Privileges
+
+1. **Minimal Privileges**: Only grant required permissions
+2. **Database Prefix**: Always use `s%_*` pattern, never `*.*`
+3. **No SUPER**: Don't grant SUPER or PROCESS privileges
+4. **Regular Audits**: Review user privileges periodically
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Node Management" icon="cube" href="/admin/nodes">
+    Learn about node configuration
+  </Card>
+  
+  <Card title="Server Management" icon="server" href="/admin/servers">
+    Create servers that use databases
+  </Card>
+</CardGroup>

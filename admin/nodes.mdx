@@ -1,0 +1,394 @@
+---
+title: Node Management
+description: Adding and configuring physical and virtual nodes for hosting game servers
+---
+
+Nodes are the physical or virtual servers that host game server containers. Each node runs the Pterodactyl Wings daemon, which manages Docker containers and communicates with the Panel.
+
+## Node Overview
+
+A node represents a server in your infrastructure that will host game servers. From `app/Models/Node.php:88-95`:
+
+```php
+protected $fillable = [
+    'public', 'name', 'location_id',
+    'description', 'fqdn', 'scheme', 'behind_proxy',
+    'memory', 'memory_overallocate', 'disk',
+    'disk_overallocate', 'upload_size', 'daemonBase',
+    'daemonSFTP', 'daemonListen',
+    'description', 'maintenance_mode',
+];
+```
+
+## Creating a Node
+
+<Steps>
+  <Step title="Navigate to Nodes">
+    Go to **Admin Panel** → **Nodes** → **Create New**
+  </Step>
+  
+  <Step title="Basic Configuration">
+    **Node Identity**
+    - **Name**: Descriptive name (1-100 characters, letters, numbers, spaces, dots, hyphens)
+    - **Description**: Optional description of the node
+    - **Location**: Select a location to organize this node
+    - **Public**: Whether this node is visible for auto-deployment
+  </Step>
+  
+  <Step title="Connection Settings">
+    **Network Configuration**
+    - **FQDN**: Fully qualified domain name or IP address
+    - **Scheme**: `http` or `https` (use HTTPS in production)
+    - **Behind Proxy**: Enable if using a reverse proxy (Cloudflare, nginx, etc.)
+    - **Daemon Port**: Port Wings listens on (default: 8080)
+    - **SFTP Port**: Port for SFTP file access (default: 2022)
+  </Step>
+  
+  <Step title="Resource Limits">
+    **Available Resources**
+    - **Total Memory**: RAM in MB available for servers
+    - **Memory Over-allocation**: Percentage to allow over memory limit (default: 0)
+    - **Total Disk**: Disk space in MB available for servers
+    - **Disk Over-allocation**: Percentage to allow over disk limit (default: 0)
+  </Step>
+  
+  <Step title="Advanced Settings">
+    **Additional Configuration**
+    - **Upload Limit**: Max upload size in MB (default: 100)
+    - **Daemon Server File Directory**: Base path for server files (default: `/var/lib/pterodactyl/volumes`)
+    - **Maintenance Mode**: Prevent new servers from starting
+  </Step>
+  
+  <Step title="Create Node">
+    Click **Create Node**
+    
+    A configuration file will be generated for Wings.
+  </Step>
+</Steps>
+
+## Node Validation Rules
+
+From `app/Models/Node.php:98-115`:
+
+```php
+public static array $validationRules = [
+    'name' => 'required|regex:/^([\w .-]{1,100})$/',
+    'description' => 'string|nullable',
+    'location_id' => 'required|exists:locations,id',
+    'public' => 'boolean',
+    'fqdn' => 'required|string',
+    'scheme' => 'required',
+    'behind_proxy' => 'boolean',
+    'memory' => 'required|numeric|min:1',
+    'memory_overallocate' => 'required|numeric|min:-1',
+    'disk' => 'required|numeric|min:1',
+    'disk_overallocate' => 'required|numeric|min:-1',
+    'daemonBase' => 'sometimes|required|regex:/^([\/ ][\d\w.\-\/]+)$/',
+    'daemonSFTP' => 'required|numeric|between:1,65535',
+    'daemonListen' => 'required|numeric|between:1,65535',
+    'maintenance_mode' => 'boolean',
+    'upload_size' => 'int|min:1',
+];
+```
+
+## Configuring Wings
+
+After creating a node, you need to install and configure Wings:
+
+<Steps>
+  <Step title="View Configuration">
+    Click on the node you just created to view its details
+  </Step>
+  
+  <Step title="Copy Configuration">
+    The Panel generates a configuration file automatically. You can view it in:
+    - **YAML format** (for manual setup)
+    - **JSON format** (for programmatic setup)
+  </Step>
+  
+  <Step title="Install Wings">
+    On your node server, install Wings:
+    
+    ```bash
+    curl -L -o /usr/local/bin/wings "https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_$([[ "$(uname -m)" == "x86_64" ]] && echo "amd64" || echo "arm64")"
+    chmod u+x /usr/local/bin/wings
+    ```
+  </Step>
+  
+  <Step title="Create Configuration Directory">
+    ```bash
+    mkdir -p /etc/pterodactyl
+    ```
+  </Step>
+  
+  <Step title="Save Configuration">
+    Save the generated configuration to `/etc/pterodactyl/config.yml`
+  </Step>
+  
+  <Step title="Start Wings">
+    ```bash
+    wings --debug
+    ```
+    
+    Or use systemd for production:
+    
+    ```bash
+    systemctl enable --now wings
+    ```
+  </Step>
+</Steps>
+
+## Auto-Configuration
+
+You can also use the auto-deploy feature:
+
+1. Run this command on your node server:
+   ```bash
+   cd /etc/pterodactyl
+   wings configure --panel-url https://panel.example.com --token YOUR_TOKEN
+   ```
+
+2. The configuration will be automatically downloaded and saved
+
+## Connection Address
+
+Wings is accessed via a connection string (from `app/Models/Node.php:134-137`):
+
+```php
+public function getConnectionAddress(): string
+{
+    return sprintf('%s://%s:%s', $this->scheme, $this->fqdn, $this->daemonListen);
+}
+```
+
+Example: `https://node1.example.com:8080`
+
+## Resource Over-allocation
+
+Over-allocation allows you to allocate more resources than physically available:
+
+### Memory Over-allocation
+
+- **0%**: Can allocate up to total memory (recommended)
+- **50%**: Can allocate 150% of total memory
+- **-1**: Unlimited over-allocation
+
+Example:
+- Node has 16GB (16384MB) RAM
+- Over-allocation: 50%
+- Can allocate: 24576MB to servers
+
+### Disk Over-allocation
+
+- **0%**: Can allocate up to total disk (recommended)
+- **20%**: Can allocate 120% of total disk
+- **-1**: Unlimited over-allocation
+
+<Warning>
+Over-allocation can lead to resource contention and poor performance. Use cautiously and monitor resource usage.
+</Warning>
+
+## Node Viability Check
+
+The Panel checks if a node can host a new server (from `app/Models/Node.php:242-249`):
+
+```php
+public function isViable(int $memory, int $disk): bool
+{
+    $memoryLimit = $this->memory * (1 + ($this->memory_overallocate / 100));
+    $diskLimit = $this->disk * (1 + ($this->disk_overallocate / 100));
+
+    return ($this->sum_memory + $memory) <= $memoryLimit 
+        && ($this->sum_disk + $disk) <= $diskLimit;
+}
+```
+
+This ensures the node has sufficient resources before deployment.
+
+## Maintenance Mode
+
+When maintenance mode is enabled:
+
+- Existing servers can continue running
+- Users cannot start stopped servers
+- No new servers can be deployed
+- Useful for updates or troubleshooting
+
+Check maintenance status (from `app/Models/Node.php:196-199`):
+
+```php
+public function isUnderMaintenance(): bool
+{
+    return $this->maintenance_mode;
+}
+```
+
+## Allocations
+
+After creating a node, you must add IP allocations:
+
+<Steps>
+  <Step title="Navigate to Node Allocations">
+    Click on the node, then go to the **Allocation** tab
+  </Step>
+  
+  <Step title="Add IP Address">
+    Enter the IP address to allocate (usually the node's public IP)
+  </Step>
+  
+  <Step title="Specify Port Range">
+    Enter port range:
+    - Single port: `25565`
+    - Range: `25565-25575`
+    - Multiple: `25565,25566,25567`
+  </Step>
+  
+  <Step title="Set Alias (Optional)">
+    Add a friendly name for the allocation
+  </Step>
+  
+  <Step title="Create Allocations">
+    Click **Submit** to create the allocations
+  </Step>
+</Steps>
+
+<Note>
+Allocations are required before creating servers. Each server needs at least one allocation for its primary port.
+</Note>
+
+## SSL/TLS Configuration
+
+### Using HTTPS (Recommended)
+
+For production deployments:
+
+1. Set **Scheme** to `https`
+2. Ensure SSL certificates are installed on the node at:
+   - `/etc/letsencrypt/live/YOUR_FQDN/fullchain.pem`
+   - `/etc/letsencrypt/live/YOUR_FQDN/privkey.pem`
+3. Wings will automatically use these certificates
+
+The SSL paths are defined in config (from `app/Models/Node.php:153-155`):
+
+```php
+'ssl' => [
+    'cert' => '/etc/letsencrypt/live/' . Str::lower($this->fqdn) . '/fullchain.pem',
+    'key' => '/etc/letsencrypt/live/' . Str::lower($this->fqdn) . '/privkey.pem',
+],
+```
+
+### Behind Proxy
+
+If using a reverse proxy (nginx, Cloudflare):
+
+1. Enable **Behind Proxy**
+2. Set **Scheme** to `https`
+3. Wings will disable SSL and listen on HTTP
+4. Proxy handles SSL termination
+
+## Default Settings
+
+Nodes are created with these defaults (from `app/Models/Node.php:120-129`):
+
+```php
+protected $attributes = [
+    'public' => true,
+    'behind_proxy' => false,
+    'memory_overallocate' => 0,
+    'disk_overallocate' => 0,
+    'daemonBase' => '/var/lib/pterodactyl/volumes',
+    'daemonSFTP' => 2022,
+    'daemonListen' => 8080,
+    'maintenance_mode' => false,
+];
+```
+
+## System Information
+
+The node detail page shows real-time information:
+
+- **Wings Version**: Currently running Wings version
+- **System Load**: CPU load average
+- **Memory Usage**: Used vs. total RAM
+- **Disk Usage**: Used vs. total disk space
+- **Container Information**: Running containers
+
+<Note>
+This information is fetched from Wings in real-time. If Wings is offline, this data won't be available.
+</Note>
+
+## Node Security
+
+Each node has authentication tokens:
+
+- **daemon_token_id**: 16-character token ID
+- **daemon_token**: 64-character encrypted token
+
+These are automatically generated and used for Panel-Wings communication.
+
+From `app/Models/Node.php:59-60`:
+
+```php
+public const DAEMON_TOKEN_ID_LENGTH = 16;
+public const DAEMON_TOKEN_LENGTH = 64;
+```
+
+## Mounts
+
+Nodes can have mounts attached:
+
+- Shared directories
+- Read-only or read-write
+- Available to specific eggs
+- Configured in the Mounts section
+
+## Troubleshooting
+
+### Connection Failed
+
+If the Panel can't connect to Wings:
+
+1. Verify Wings is running: `systemctl status wings`
+2. Check firewall allows connections on daemon port
+3. Verify FQDN resolves to correct IP
+4. Check SSL certificates if using HTTPS
+5. Review Wings logs: `journalctl -u wings`
+
+### Resource Over-allocation
+
+If servers are slow:
+
+1. Check actual resource usage on node
+2. Reduce over-allocation percentages
+3. Migrate servers to other nodes
+4. Add more physical resources
+
+### Port Conflicts
+
+If allocations aren't working:
+
+1. Ensure ports aren't used by other services
+2. Check firewall rules allow the ports
+3. Verify Wings is binding to correct IP
+
+## Best Practices
+
+1. **Use HTTPS**: Always use SSL/TLS in production
+2. **Limit Over-allocation**: Keep at 0% or low percentages
+3. **Regular Updates**: Keep Wings updated
+4. **Monitor Resources**: Watch CPU, RAM, and disk usage
+5. **Separate Locations**: Use locations to organize nodes geographically
+6. **Firewall Rules**: Only expose necessary ports
+7. **Backup Configuration**: Save Wings config files
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Locations" icon="map-marker-alt" href="/admin/locations">
+    Organize nodes by location
+  </Card>
+  
+  <Card title="Server Creation" icon="server" href="/admin/servers">
+    Deploy servers on your nodes
+  </Card>
+</CardGroup>

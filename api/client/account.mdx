@@ -1,0 +1,313 @@
+---
+title: Account Management
+description: Manage user account information, email, password, and two-factor authentication
+---
+
+The account endpoints allow users to manage their profile information, update credentials, and configure security settings.
+
+## Get Account Details
+
+Retrieve information about the currently authenticated user.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/account" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+### Response
+
+```json
+{
+  "object": "user",
+  "attributes": {
+    "id": 1,
+    "admin": false,
+    "username": "john_doe",
+    "email": "john@example.com",
+    "first_name": "John",
+    "last_name": "Doe",
+    "language": "en"
+  }
+}
+```
+
+<ResponseField name="id" type="integer">
+  Unique user identifier
+</ResponseField>
+
+<ResponseField name="admin" type="boolean">
+  Whether the user has administrator privileges
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  The user's username
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  The user's email address
+</ResponseField>
+
+<ResponseField name="first_name" type="string">
+  User's first name
+</ResponseField>
+
+<ResponseField name="last_name" type="string">
+  User's last name
+</ResponseField>
+
+<ResponseField name="language" type="string">
+  Preferred language code (e.g., "en", "de", "fr")
+</ResponseField>
+
+## Update Email Address
+
+Update the authenticated user's email address.
+
+```bash
+curl -X PUT "https://panel.example.com/api/client/account/email" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "newemail@example.com",
+    "password": "current_password"
+  }'
+```
+
+<ParamField body="email" type="string" required>
+  The new email address
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Current account password for verification
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+## Update Password
+
+Update the authenticated user's password. This will log out all other sessions.
+
+```bash
+curl -X PUT "https://panel.example.com/api/client/account/password" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "current_password": "old_password",
+    "password": "new_password",
+    "password_confirmation": "new_password"
+  }'
+```
+
+<ParamField body="current_password" type="string" required>
+  The current account password
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The new password (minimum 8 characters)
+</ParamField>
+
+<ParamField body="password_confirmation" type="string" required>
+  Must match the new password
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success. All other sessions will be terminated.
+
+## Two-Factor Authentication
+
+### Get 2FA Setup Details
+
+Get the QR code and secret for setting up two-factor authentication.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/account/two-factor" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+### Response
+
+```json
+{
+  "data": {
+    "image_url_data": "data:image/png;base64,...",
+    "secret": "JBSWY3DPEHPK3PXP"
+  }
+}
+```
+
+<ResponseField name="image_url_data" type="string">
+  Base64-encoded QR code image for authenticator apps
+</ResponseField>
+
+<ResponseField name="secret" type="string">
+  The TOTP secret key for manual entry
+</ResponseField>
+
+### Enable Two-Factor Authentication
+
+Enable 2FA by providing a valid TOTP code and password.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/account/two-factor" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "123456",
+    "password": "your_password"
+  }'
+```
+
+<ParamField body="code" type="string" required>
+  6-digit TOTP code from authenticator app
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Current account password
+</ParamField>
+
+### Response
+
+```json
+{
+  "object": "recovery_tokens",
+  "attributes": {
+    "tokens": [
+      "abcd1234",
+      "efgh5678",
+      "ijkl9012"
+    ]
+  }
+}
+```
+
+<ResponseField name="tokens" type="array">
+  Recovery codes for account access if 2FA device is lost. Store these securely.
+</ResponseField>
+
+### Disable Two-Factor Authentication
+
+Disable 2FA on the account.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/account/two-factor/disable" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "password": "your_password"
+  }'
+```
+
+<ParamField body="password" type="string" required>
+  Current account password
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+## API Keys
+
+### List API Keys
+
+Get all API keys for the authenticated user.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/account/api-keys" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+### Create API Key
+
+Create a new API key.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/account/api-keys" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "My API Key",
+    "allowed_ips": ["192.168.1.1", "10.0.0.0/8"]
+  }'
+```
+
+<ParamField body="description" type="string" required>
+  Description for the API key
+</ParamField>
+
+<ParamField body="allowed_ips" type="array">
+  Optional array of allowed IP addresses or CIDR ranges
+</ParamField>
+
+### Delete API Key
+
+Delete an API key by its identifier.
+
+```bash
+curl -X DELETE "https://panel.example.com/api/client/account/api-keys/{identifier}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+## SSH Keys
+
+### List SSH Keys
+
+Get all SSH public keys associated with the account.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/account/ssh-keys" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+### Add SSH Key
+
+Add a new SSH public key to the account.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/account/ssh-keys" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My Laptop",
+    "public_key": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ..."
+  }'
+```
+
+<ParamField body="name" type="string" required>
+  Descriptive name for the SSH key
+</ParamField>
+
+<ParamField body="public_key" type="string" required>
+  The SSH public key (ssh-rsa, ssh-ed25519, etc.)
+</ParamField>
+
+### Remove SSH Key
+
+Remove an SSH key from the account.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/account/ssh-keys/remove" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fingerprint": "SHA256:abc123..."
+  }'
+```
+
+<ParamField body="fingerprint" type="string" required>
+  The SSH key fingerprint to remove
+</ParamField>

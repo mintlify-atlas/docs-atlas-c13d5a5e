@@ -1,0 +1,304 @@
+---
+title: Network Allocations
+description: Manage server IP addresses and ports
+---
+
+Network allocations are IP address and port combinations assigned to your server. Each server has a primary allocation and can have multiple secondary allocations.
+
+## List Allocations
+
+Get all network allocations for a server.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}/network/allocations" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+<ParamField path="server" type="string" required>
+  The server identifier
+</ParamField>
+
+### Response
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "allocation",
+      "attributes": {
+        "id": 15,
+        "ip": "192.168.1.100",
+        "ip_alias": "node01.example.com",
+        "port": 25565,
+        "notes": "Primary game port",
+        "is_default": true
+      }
+    },
+    {
+      "object": "allocation",
+      "attributes": {
+        "id": 16,
+        "ip": "192.168.1.100",
+        "ip_alias": "node01.example.com",
+        "port": 25575,
+        "notes": "RCON port",
+        "is_default": false
+      }
+    }
+  ]
+}
+```
+
+<ResponseField name="id" type="integer">
+  Allocation identifier
+</ResponseField>
+
+<ResponseField name="ip" type="string">
+  IP address of the allocation
+</ResponseField>
+
+<ResponseField name="ip_alias" type="string|null">
+  Human-readable alias for the IP (usually a hostname)
+</ResponseField>
+
+<ResponseField name="port" type="integer">
+  Port number (1-65535)
+</ResponseField>
+
+<ResponseField name="notes" type="string|null">
+  Optional notes describing the allocation's purpose
+</ResponseField>
+
+<ResponseField name="is_default" type="boolean">
+  Whether this is the primary allocation for the server
+</ResponseField>
+
+## Create Allocation
+
+Automatically assign a new allocation to the server from available ports.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/network/allocations" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+### Response
+
+Returns the newly created allocation object (same format as list response).
+
+<Info>
+The system will automatically find and assign an available port from the node's allocation pool. You cannot specify a specific IP or port when creating allocations through the client API.
+</Info>
+
+<Warning>
+Allocation creation will fail if:
+- You've reached your server's allocation limit
+- No allocations are available on the node
+- The allocation limit is set to 0 (unlimited allocations not allowed)
+</Warning>
+
+## Update Allocation Notes
+
+Update the notes for an allocation.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/network/allocations/{allocation}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "notes": "RCON Admin Port"
+  }'
+```
+
+<ParamField path="allocation" type="integer" required>
+  The allocation ID
+</ParamField>
+
+<ParamField body="notes" type="string" required>
+  Description for the allocation (can be empty string to clear)
+</ParamField>
+
+### Response
+
+Returns the updated allocation object.
+
+## Set Primary Allocation
+
+Change the primary (default) allocation for the server.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/network/allocations/{allocation}/primary" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+<ParamField path="allocation" type="integer" required>
+  The allocation ID to set as primary
+</ParamField>
+
+### Response
+
+Returns the updated allocation object with `is_default: true`.
+
+<Info>
+The primary allocation is used as the server's main IP:port in the panel interface and is typically the port your game server listens on.
+</Info>
+
+## Delete Allocation
+
+Remove an allocation from the server.
+
+```bash
+curl -X DELETE "https://panel.example.com/api/client/servers/{server}/network/allocations/{allocation}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+<ParamField path="allocation" type="integer" required>
+  The allocation ID to delete
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+<Warning>
+**Important Restrictions:**
+- You cannot delete the primary allocation
+- You cannot delete allocations if the server has no allocation limit set
+- Deletion will fail if the allocation is in use by a running process
+</Warning>
+
+## Allocation Limits
+
+The number of allocations you can create is controlled by your server's `allocation_limit`:
+
+```json
+{
+  "feature_limits": {
+    "databases": 5,
+    "allocations": 3,
+    "backups": 3
+  }
+}
+```
+
+- `null` or `0` = Only primary allocation (no additional allocations)
+- `1` = Primary + 1 additional allocation (2 total)
+- `5` = Primary + 5 additional allocations (6 total)
+
+## Common Use Cases
+
+### Minecraft Server with RCON
+
+```bash
+# Primary allocation: 25565 (game)
+# Additional allocation: 25575 (RCON)
+
+# Create second allocation
+curl -X POST "https://panel.example.com/api/client/servers/{server}/network/allocations" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+# Update notes
+curl -X POST "https://panel.example.com/api/client/servers/{server}/network/allocations/16" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"notes": "RCON Port"}'
+```
+
+### Multiple Game Servers
+
+Some game server applications can run multiple server instances on different ports:
+
+```bash
+# Primary: 27015 (Server 1)
+# Additional: 27016 (Server 2)
+# Additional: 27017 (Server 3)
+
+# Add allocations
+for i in {1..2}; do
+  curl -X POST "https://panel.example.com/api/client/servers/{server}/network/allocations" \
+    -H "Authorization: Bearer YOUR_API_KEY"
+done
+```
+
+### Proxy/Gateway Servers
+
+For proxy servers (e.g., BungeeCord, Velocity) with multiple backend connections:
+
+```bash
+# Primary: 25565 (Public facing)
+# Additional: 25566-25570 (Backend servers)
+```
+
+## Connection Strings
+
+Use allocations to connect to your server:
+
+### Using IP Address
+
+```
+192.168.1.100:25565
+```
+
+### Using IP Alias (Hostname)
+
+```
+node01.example.com:25565
+```
+
+### Default Port
+
+If your allocation uses the game's default port, players can often omit it:
+
+```
+# Minecraft default port is 25565
+node01.example.com        # Same as node01.example.com:25565
+
+# FiveM default port is 30120  
+node01.example.com:30120  # Must specify non-default ports
+```
+
+## Troubleshooting
+
+### "Cannot assign additional allocations"
+
+You've reached your allocation limit. Either:
+1. Delete an unused allocation
+2. Contact your administrator to increase the limit
+
+### "You cannot delete allocations for this server"
+
+The server has no allocation limit set (unlimited = 0). This prevents deletion to avoid accidents.
+
+### "You cannot delete the primary allocation"
+
+Switch to a different primary allocation first:
+
+```bash
+# Set allocation 16 as primary
+curl -X POST "https://panel.example.com/api/client/servers/{server}/network/allocations/16/primary" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+# Now you can delete allocation 15
+curl -X DELETE "https://panel.example.com/api/client/servers/{server}/network/allocations/15" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Port Already in Use
+
+If your server won't start due to "address already in use" errors:
+
+1. Check that your game server is configured to use the correct ports
+2. Verify no other processes are using the ports
+3. Ensure your server configuration matches your allocations
+
+```bash
+# Check allocations
+curl -X GET "https://panel.example.com/api/client/servers/{server}/network/allocations" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```

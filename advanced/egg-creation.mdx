@@ -1,0 +1,472 @@
+---
+title: 'Egg Creation'
+description: 'Creating custom eggs for Pterodactyl Panel'
+---
+
+Eggs are the core configuration format for defining how servers are installed, started, and managed in Pterodactyl. This guide covers creating custom eggs from scratch.
+
+## What is an Egg?
+
+An Egg is a JSON configuration file that defines:
+
+- Server installation process
+- Docker images to use
+- Startup commands and parameters
+- Environment variables
+- Configuration file parsing
+- Stop commands
+- Features and behavior
+
+## Egg Structure
+
+Eggs use the export version `PTDL_v2` format:
+
+```json
+{
+  "_comment": "Pterodactyl Egg Configuration",
+  "meta": {
+    "version": "PTDL_v2",
+    "update_url": null
+  },
+  "exported_at": "2026-03-04T12:00:00+00:00",
+  "name": "My Custom Server",
+  "author": "admin@example.com",
+  "description": "Description of the server type",
+  "features": null,
+  "docker_images": {
+    "Default": "ghcr.io/pterodactyl/yolks:debian"
+  },
+  "file_denylist": [],
+  "startup": "./start.sh",
+  "config": {
+    "files": "{}",
+    "startup": "{}",
+    "logs": "{}",
+    "stop": "^C"
+  },
+  "scripts": {
+    "installation": {
+      "script": "#!/bin/bash\n# Installation script",
+      "container": "debian:12",
+      "entrypoint": "bash"
+    }
+  },
+  "variables": []
+}
+```
+
+## Core Fields
+
+### Basic Information
+
+**name** (string, required):
+Display name for the egg
+
+```json
+"name": "Minecraft Java Edition"
+```
+
+**author** (string, required):
+Email of the egg author
+
+```json
+"author": "admin@example.com"
+```
+
+**description** (string, optional):
+Description shown to users
+
+```json
+"description": "Vanilla Minecraft server running on Java"
+```
+
+### Docker Configuration
+
+**docker_images** (object, required):
+Available Docker images for this egg
+
+```json
+"docker_images": {
+  "Java 8": "ghcr.io/pterodactyl/yolks:java_8",
+  "Java 11": "ghcr.io/pterodactyl/yolks:java_11",
+  "Java 17": "ghcr.io/pterodactyl/yolks:java_17",
+  "Java 21": "ghcr.io/pterodactyl/yolks:java_21"
+}
+```
+
+Users can select which image to use when creating servers.
+
+**force_outgoing_ip** (boolean, optional):
+Force servers to use their allocation IP for outgoing connections
+
+```json
+"force_outgoing_ip": false
+```
+
+### Startup Configuration
+
+**startup** (string, required):
+Command to start the server
+
+```json
+"startup": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}"
+```
+
+Supports variables:
+- `{{VARIABLE_NAME}}` - User-defined variables
+- `{{SERVER_MEMORY}}` - Allocated memory
+- `{{SERVER_IP}}` - Server IP
+- `{{SERVER_PORT}}` - Server port
+
+### File Deny List
+
+**file_denylist** (array, optional):
+Files/directories that cannot be modified or deleted by users
+
+```json
+"file_denylist": [
+  "server.properties",
+  "config/important.yml"
+]
+```
+
+### Features
+
+**features** (array, optional):
+Special features to enable
+
+```json
+"features": ["eula", "fastdl"]
+```
+
+Available features:
+- `eula` - Shows EULA acceptance popup (Minecraft)
+- `fastdl` - FastDL support (Source games)
+
+## Configuration Files
+
+### config.files
+
+Defines how to parse and modify configuration files:
+
+```json
+"config": {
+  "files": {
+    "server.properties": {
+      "parser": "properties",
+      "find": {
+        "server-ip": "0.0.0.0",
+        "server-port": "{{server.build.default.port}}",
+        "max-players": "{{server.build.env.MAX_PLAYERS}}"
+      }
+    },
+    "config.yml": {
+      "parser": "yaml",
+      "find": {
+        "database.host": "{{config.docker.interface}}"
+      }
+    }
+  }
+}
+```
+
+Supported parsers:
+- `properties` - Java properties files
+- `yaml` - YAML configuration
+- `file` - Plain text replacement
+- `json` - JSON configuration
+- `xml` - XML configuration
+
+### config.startup
+
+Defines how to detect server state from console output:
+
+```json
+"config": {
+  "startup": {
+    "done": "Done (",
+    "userInteraction": []
+  }
+}
+```
+
+**done**: String to detect when server has fully started
+
+### config.logs
+
+Defines custom log parsing (optional):
+
+```json
+"config": {
+  "logs": {}
+}
+```
+
+### config.stop
+
+Command to stop the server:
+
+```json
+"config": {
+  "stop": "stop"
+}
+```
+
+Common values:
+- `^C` - Send SIGINT (Ctrl+C)
+- `stop` - Send "stop" command
+- `end` - Send "end" command
+- `quit` - Send "quit" command
+
+## Installation Script
+
+The installation script runs in a separate container to set up the server:
+
+```json
+"scripts": {
+  "installation": {
+    "script": "#!/bin/bash\n\n## Install script here\ncd /mnt/server\n\n# Download server files\ncurl -sSL https://example.com/server.jar -o server.jar\n\necho \"Installation complete\"",
+    "container": "ghcr.io/pterodactyl/installers:debian",
+    "entrypoint": "bash"
+  }
+}
+```
+
+### Available Variables
+
+Installation scripts have access to:
+
+- `${STARTUP}` - Startup command
+- `${SERVER_MEMORY}` - Allocated memory
+- `${SERVER_IP}` - Server IP
+- `${SERVER_PORT}` - Server port
+- All user-defined variables
+
+### Installation Container
+
+Use appropriate container for installation:
+
+- `ghcr.io/pterodactyl/installers:debian` - Debian-based
+- `ghcr.io/pterodactyl/installers:alpine` - Alpine-based
+- `node:18-alpine` - For Node.js apps
+- Custom containers as needed
+
+### Best Practices
+
+1. **Always use absolute paths** (`/mnt/server`)
+2. **Check for errors** and exit with non-zero code on failure
+3. **Provide progress output** for user feedback
+4. **Clean up temporary files** after installation
+5. **Validate downloads** with checksums when possible
+
+## Variables
+
+Variables allow users to customize their servers:
+
+```json
+"variables": [
+  {
+    "name": "Server Version",
+    "description": "The version of the server to install",
+    "env_variable": "SERVER_VERSION",
+    "default_value": "latest",
+    "user_viewable": true,
+    "user_editable": true,
+    "rules": "required|string|max:20",
+    "field_type": "text"
+  },
+  {
+    "name": "Max Players",
+    "description": "Maximum number of players",
+    "env_variable": "MAX_PLAYERS",
+    "default_value": "20",
+    "user_viewable": true,
+    "user_editable": true,
+    "rules": "required|integer|min:1|max:100",
+    "field_type": "text"
+  },
+  {
+    "name": "Enable PVP",
+    "description": "Enable player vs player combat",
+    "env_variable": "PVP",
+    "default_value": "true",
+    "user_viewable": true,
+    "user_editable": true,
+    "rules": "required|boolean",
+    "field_type": "text"
+  }
+]
+```
+
+### Variable Fields
+
+**name** (string): Display name
+
+**description** (string): Help text for users
+
+**env_variable** (string): Environment variable name (uppercase, alphanumeric + underscore)
+
+**default_value** (string): Default value
+
+**user_viewable** (boolean): Can users see this variable?
+
+**user_editable** (boolean): Can users edit this variable?
+
+**rules** (string): Laravel validation rules
+
+Common validation rules:
+- `required` - Must have a value
+- `string` - Must be a string
+- `integer` - Must be an integer
+- `boolean` - Must be true/false
+- `min:N` - Minimum value/length
+- `max:N` - Maximum value/length
+- `in:A,B,C` - Must be one of the listed values
+- `regex:/pattern/` - Must match regex pattern
+
+**field_type** (string): UI field type (currently always "text")
+
+## Example: Custom Game Server Egg
+
+Here's a complete example for a custom game server:
+
+```json
+{
+  "_comment": "Custom Game Server Egg",
+  "meta": {
+    "version": "PTDL_v2",
+    "update_url": null
+  },
+  "exported_at": "2026-03-04T12:00:00+00:00",
+  "name": "Custom Game Server",
+  "author": "admin@example.com",
+  "description": "A custom game server implementation",
+  "features": null,
+  "docker_images": {
+    "Default": "ghcr.io/pterodactyl/yolks:debian"
+  },
+  "file_denylist": [
+    "config.ini"
+  ],
+  "startup": "./gameserver -port={{SERVER_PORT}} -maxplayers={{MAX_PLAYERS}}",
+  "config": {
+    "files": {
+      "config.ini": {
+        "parser": "ini",
+        "find": {
+          "server.port": "{{server.build.default.port}}",
+          "server.maxplayers": "{{server.build.env.MAX_PLAYERS}}"
+        }
+      }
+    },
+    "startup": {
+      "done": "Server started successfully"
+    },
+    "logs": {},
+    "stop": "^C"
+  },
+  "scripts": {
+    "installation": {
+      "script": "#!/bin/bash\nset -e\n\ncd /mnt/server\n\n# Download server\necho \"Downloading server files...\"\ncurl -sSL https://example.com/gameserver-${VERSION}.tar.gz -o server.tar.gz\n\n# Extract\necho \"Extracting files...\"\ntar -xzf server.tar.gz\nrm server.tar.gz\n\n# Set permissions\nchmod +x gameserver\n\necho \"Installation complete!\"",
+      "container": "ghcr.io/pterodactyl/installers:debian",
+      "entrypoint": "bash"
+    }
+  },
+  "variables": [
+    {
+      "name": "Server Version",
+      "description": "Version of the game server to install",
+      "env_variable": "VERSION",
+      "default_value": "1.0.0",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|max:10",
+      "field_type": "text"
+    },
+    {
+      "name": "Max Players",
+      "description": "Maximum number of concurrent players",
+      "env_variable": "MAX_PLAYERS",
+      "default_value": "32",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|min:1|max:128",
+      "field_type": "text"
+    }
+  ]
+}
+```
+
+## Importing Eggs
+
+### Via Admin Panel
+
+1. Navigate to **Nests** in the admin area
+2. Select the target nest
+3. Click **Import Egg**
+4. Upload your JSON file or paste the JSON
+5. Click **Import**
+
+### Via Command Line
+
+```bash
+php artisan p:egg:import --json=/path/to/egg.json --nest=1
+```
+
+## Exporting Eggs
+
+Export existing eggs to use as templates:
+
+```bash
+php artisan p:egg:export --egg=1
+```
+
+Or export via the admin panel:
+
+1. Navigate to the egg
+2. Click **Export**
+3. Save the JSON file
+
+## Testing Eggs
+
+1. **Create a test server** using the egg
+2. **Verify installation** completes successfully
+3. **Check startup** works correctly
+4. **Test variables** are applied properly
+5. **Verify stop command** works
+6. **Test configuration parsing** updates files correctly
+7. **Check file deny list** prevents editing protected files
+
+## Troubleshooting
+
+### Installation Fails
+
+- Check installation script syntax
+- Verify download URLs are accessible
+- Ensure proper permissions on files
+- Check container has required tools
+
+### Server Won't Start
+
+- Verify startup command is correct
+- Check all variables are defined
+- Ensure Docker image is appropriate
+- Review server console output
+
+### Configuration Not Updating
+
+- Verify parser type matches file format
+- Check file paths are correct
+- Ensure find/replace values are valid
+- Confirm variables exist
+
+## Best Practices
+
+1. **Use semantic versioning** for egg updates
+2. **Document variables** clearly
+3. **Provide sensible defaults** for all variables
+4. **Test thoroughly** before deploying
+5. **Use validation rules** to prevent invalid input
+6. **Keep installation scripts simple** and well-commented
+7. **Support multiple Docker images** when applicable
+8. **Follow naming conventions** for variables (UPPERCASE_WITH_UNDERSCORES)

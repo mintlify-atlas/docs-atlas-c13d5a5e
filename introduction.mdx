@@ -1,0 +1,162 @@
+---
+title: 'Introduction'
+description: 'Welcome to Pterodactyl Panel - the free, open-source game server management platform'
+---
+
+# Introduction to Pterodactyl Panel
+
+Pterodactyl® is a free, open-source game server management panel built with PHP, React, and Go. Designed with security in mind, Pterodactyl runs all game servers in isolated Docker containers while exposing a beautiful and intuitive UI to end users.
+
+**Stop settling for less. Make game servers a first class citizen on your platform.**
+
+## What is Pterodactyl?
+
+Pterodactyl Panel is a modern game server management platform that allows you to run, manage, and scale game servers with ease. Built from the ground up with security and performance as core principles, Pterodactyl provides a robust solution for both individual server operators and hosting companies.
+
+### Key Characteristics
+
+<CardGroup cols={2}>
+  <Card title="Open Source" icon="code">
+    Released under the MIT License, completely free to use and modify
+  </Card>
+  <Card title="Docker-Based" icon="docker">
+    All game servers run in isolated Docker containers for maximum security
+  </Card>
+  <Card title="Modern Stack" icon="react">
+    Built with PHP, React, TypeScript, and TailwindCSS
+  </Card>
+  <Card title="RESTful API" icon="code-branch">
+    Full-featured API for automation and integration
+  </Card>
+</CardGroup>
+
+## Architecture Overview
+
+Pterodactyl consists of two main components:
+
+### Panel
+The web interface and control center built with Laravel (PHP) and React. The Panel provides:
+- User management and authentication
+- Server allocation and configuration
+- File management interface
+- Database management
+- RESTful API for external integrations
+
+### Wings
+The server control plane daemon written in Go. Wings handles:
+- Docker container management
+- Real-time server statistics
+- File operations and backups
+- Console output streaming via WebSockets
+- SFTP server for file access
+
+<Note>
+The Panel and Wings work together but can be installed on separate machines. A single Panel instance can manage multiple Wings nodes across different physical servers.
+</Note>
+
+## Why Choose Pterodactyl?
+
+### Security First
+- **Container Isolation**: Each game server runs in its own Docker container, preventing servers from interfering with each other
+- **Resource Limits**: CPU, memory, and disk quotas prevent resource abuse
+- **Permission System**: Granular permissions for users and subusers
+- **Two-Factor Authentication**: Built-in 2FA support for enhanced security
+
+### Performance Optimized
+- **Low Overhead**: Minimal resource usage on host systems
+- **Redis Caching**: Fast data access and session management
+- **Async Queue System**: Background task processing for non-blocking operations
+- **Efficient File Operations**: Direct container access for fast file management
+
+### Developer Friendly
+- **RESTful API**: Comprehensive API for automation
+- **Modern Tech Stack**: React, TypeScript, TailwindCSS for the frontend
+- **Extensive Documentation**: Detailed guides and API references
+- **Active Community**: Discord community with over 100,000 members
+
+## Supported Games
+
+Pterodactyl supports a wide variety of games through its flexible "egg" system:
+
+### Core Supported Games
+- **Minecraft** - including Paper, Spigot, Bungeecord, Waterfall, and more
+- **Rust**
+- **Terraria**
+- **Teamspeak**
+- **Mumble**
+- **Team Fortress 2**
+- **Counter Strike: Global Offensive**
+- **Garry's Mod**
+- **ARK: Survival Evolved**
+
+### Community-Supported Games
+- Factorio
+- San Andreas: MP
+- Pocketmine MP
+- Squad
+- Xonotic
+- Starmade
+- Discord Bots (Node.js/Python)
+- [and many more...](https://pterodactyleggs.com)
+
+<Tip>
+The community maintains hundreds of additional "eggs" (server configurations) for various games and applications. If a game runs on Linux, it can likely run on Pterodactyl.
+</Tip>
+
+## Technology Stack
+
+### Backend
+- **Laravel 11** - PHP framework for the Panel
+- **PHP 8.2+** - Programming language
+- **MySQL/MariaDB** - Database storage
+- **Redis** - Caching and queue management
+- **Go** - Wings daemon programming language
+
+### Frontend
+- **React 16** - UI framework
+- **TypeScript** - Type-safe JavaScript
+- **TailwindCSS** - Utility-first CSS framework
+- **Webpack** - Asset bundling
+
+### Infrastructure
+- **Docker** - Container runtime
+- **Nginx/Apache** - Web server
+- **Let's Encrypt** - SSL certificates (optional)
+
+## Community and Support
+
+Pterodactyl has a vibrant, active community:
+
+- **Discord**: Join over 100,000 members for real-time help and discussion
+- **GitHub**: Report issues, contribute code, and track development
+- **Documentation**: Comprehensive guides for installation, configuration, and troubleshooting
+- **Community Guides**: User-contributed tutorials and walkthroughs
+
+## License
+
+Pterodactyl® Copyright © 2015 - 2022 Dane Everitt and contributors.
+
+Code released under the [MIT License](https://github.com/pterodactyl/panel/blob/develop/LICENSE.md), which means:
+- Free to use commercially
+- Free to modify and distribute
+- No warranty provided
+- Must include original license and copyright notice
+
+## Next Steps
+
+Ready to get started? Continue to the next sections:
+
+<CardGroup cols={2}>
+  <Card title="Features" icon="star" href="/features">
+    Explore the full feature set of Pterodactyl Panel
+  </Card>
+  <Card title="System Requirements" icon="server" href="/system-requirements">
+    Check if your server meets the requirements
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Follow the installation guide to set up your Panel
+  </Card>
+  <Card title="Documentation" icon="book" href="https://pterodactyl.io/panel/1.0/getting_started.html">
+    Visit the official documentation
+  </Card>
+</CardGroup>

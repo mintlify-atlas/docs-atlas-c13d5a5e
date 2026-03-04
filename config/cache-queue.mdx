@@ -1,0 +1,618 @@
+---
+title: Cache & Queue Configuration
+description: Configure Redis, caching, queue workers, and background job processing
+---
+
+Pterodactyl Panel uses caching to improve performance and queues for asynchronous job processing. Redis is the recommended backend for both.
+
+## Redis Configuration
+
+### Basic Redis Setup
+
+```bash .env
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_PASSWORD=null
+REDIS_CLIENT=predis
+```
+
+<ParamField path="REDIS_HOST" type="string" default="127.0.0.1">
+  Redis server hostname or IP address.
+</ParamField>
+
+<ParamField path="REDIS_PORT" type="integer" default="6379">
+  Redis server port.
+</ParamField>
+
+<ParamField path="REDIS_PASSWORD" type="string">
+  Redis authentication password. Use `null` for no authentication.
+  
+  <Warning>
+    Always set a strong password for Redis in production environments.
+  </Warning>
+</ParamField>
+
+<ParamField path="REDIS_CLIENT" type="string" default="predis">
+  Redis client library. Options:
+  - `predis` - Pure PHP implementation (default)
+  - `phpredis` - PHP extension (faster, requires installation)
+</ParamField>
+
+### Advanced Redis Configuration
+
+```bash .env
+REDIS_SCHEME=tcp
+REDIS_PATH=/run/redis/redis.sock
+REDIS_USERNAME=default
+REDIS_DATABASE=0
+REDIS_DATABASE_SESSIONS=1
+```
+
+<ParamField path="REDIS_SCHEME" type="string" default="tcp">
+  Connection scheme. Options: `tcp`, `unix`
+</ParamField>
+
+<ParamField path="REDIS_PATH" type="string">
+  Path to Unix socket when using `REDIS_SCHEME=unix`. Provides better performance for local Redis.
+</ParamField>
+
+<ParamField path="REDIS_USERNAME" type="string">
+  Redis username for ACL authentication (Redis 6.0+).
+</ParamField>
+
+<ParamField path="REDIS_DATABASE" type="integer" default="0">
+  Redis database number for general cache and queue data.
+</ParamField>
+
+<ParamField path="REDIS_DATABASE_SESSIONS" type="integer" default="1">
+  Redis database number for session storage (when using Redis sessions).
+</ParamField>
+
+### Redis Clustering
+
+```bash .env
+REDIS_CLUSTER=redis
+REDIS_PREFIX=pterodactyl_
+```
+
+<ParamField path="REDIS_CLUSTER" type="string" default="redis">
+  Redis cluster mode. Options: `redis`, `predis`
+</ParamField>
+
+<ParamField path="REDIS_PREFIX" type="string">
+  Prefix for all Redis keys. Automatically generated from `APP_NAME` if not set.
+</ParamField>
+
+### Redis SSL/TLS
+
+For secure Redis connections:
+
+```bash .env
+REDIS_VERIFY_PEER=true
+REDIS_VERIFY_PEER_NAME=true
+REDIS_CAFILE=/path/to/ca-cert.pem
+REDIS_LOCAL_CERT=/path/to/client-cert.pem
+REDIS_LOCAL_PK=/path/to/client-key.pem
+```
+
+<Note>
+  SSL configuration only works with the `phpredis` client.
+</Note>
+
+## Cache Configuration
+
+### Cache Driver Selection
+
+```bash .env
+CACHE_DRIVER=redis
+CACHE_PREFIX=pterodactyl_cache_
+```
+
+<ParamField path="CACHE_DRIVER" type="string" default="redis">
+  Cache storage driver. Options:
+  - `redis` - Redis (recommended)
+  - `file` - Filesystem storage
+  - `database` - Database storage
+  - `memcached` - Memcached
+  - `array` - In-memory (testing only)
+</ParamField>
+
+<ParamField path="CACHE_PREFIX" type="string">
+  Prefix for cache keys. Auto-generated from `APP_NAME` if not set.
+</ParamField>
+
+### File Cache
+
+For development or small deployments:
+
+```bash .env
+CACHE_DRIVER=file
+```
+
+Cache files are stored in `storage/framework/cache/data/`.
+
+### Database Cache
+
+Store cache in the database:
+
+```bash .env
+CACHE_DRIVER=database
+DB_CACHE_CONNECTION=mysql
+DB_CACHE_TABLE=cache
+```
+
+<Note>
+  Database caching is slower than Redis but doesn't require additional services.
+</Note>
+
+### Memcached Configuration
+
+```bash .env
+CACHE_DRIVER=memcached
+MEMCACHED_HOST=127.0.0.1
+MEMCACHED_PORT=11211
+MEMCACHED_USERNAME=
+MEMCACHED_PASSWORD=
+```
+
+### Redis Cache Connection
+
+```bash .env
+REDIS_CACHE_CONNECTION=default
+REDIS_CACHE_LOCK_CONNECTION=default
+```
+
+<ParamField path="REDIS_CACHE_CONNECTION" type="string" default="default">
+  Redis connection to use for caching.
+</ParamField>
+
+<ParamField path="REDIS_CACHE_LOCK_CONNECTION" type="string" default="default">
+  Redis connection to use for cache locks.
+</ParamField>
+
+## Queue Configuration
+
+### Queue Driver Selection
+
+```bash .env
+QUEUE_CONNECTION=redis
+```
+
+<ParamField path="QUEUE_CONNECTION" type="string" default="redis">
+  Queue backend driver. Options:
+  - `redis` - Redis (recommended)
+  - `database` - Database storage
+  - `sync` - Synchronous (no queuing, development only)
+  - `beanstalkd` - Beanstalkd queue
+  - `sqs` - Amazon SQS
+</ParamField>
+
+### Redis Queue Configuration
+
+```bash .env
+QUEUE_CONNECTION=redis
+REDIS_QUEUE_CONNECTION=default
+REDIS_QUEUE=standard
+REDIS_QUEUE_RETRY_AFTER=90
+```
+
+<ParamField path="REDIS_QUEUE_CONNECTION" type="string" default="default">
+  Redis connection to use for queues.
+</ParamField>
+
+<ParamField path="REDIS_QUEUE" type="string" default="standard">
+  Default queue name.
+</ParamField>
+
+<ParamField path="REDIS_QUEUE_RETRY_AFTER" type="integer" default="90">
+  Seconds after which a job is retried if a worker dies.
+</ParamField>
+
+### Database Queue Configuration
+
+```bash .env
+QUEUE_CONNECTION=database
+DB_QUEUE_CONNECTION=mysql
+DB_QUEUE_TABLE=jobs
+DB_QUEUE=standard
+DB_QUEUE_RETRY_AFTER=90
+```
+
+<Note>
+  Database queues require the `jobs` and `failed_jobs` tables. Run migrations to create them.
+</Note>
+
+### Failed Jobs Configuration
+
+```bash .env
+QUEUE_FAILED_DRIVER=database-uuids
+```
+
+<ParamField path="QUEUE_FAILED_DRIVER" type="string" default="database-uuids">
+  Storage for failed jobs. Options:
+  - `database-uuids` - Database with UUID identifiers
+  - `file` - Filesystem storage
+  - `null` - Discard failed jobs
+</ParamField>
+
+## Session Storage
+
+### Session Driver Selection
+
+```bash .env
+SESSION_DRIVER=redis
+SESSION_LIFETIME=720
+```
+
+<ParamField path="SESSION_DRIVER" type="string" default="redis">
+  Session storage driver. Options:
+  - `redis` - Redis (recommended)
+  - `database` - Database storage
+  - `file` - Filesystem storage
+  - `cookie` - Browser cookies
+</ParamField>
+
+<ParamField path="SESSION_LIFETIME" type="integer" default="720">
+  Session lifetime in minutes (12 hours by default).
+</ParamField>
+
+### Redis Session Configuration
+
+```bash .env
+SESSION_DRIVER=redis
+SESSION_CONNECTION=sessions
+```
+
+Redis sessions use the `sessions` connection, which points to `REDIS_DATABASE_SESSIONS`.
+
+### Database Session Configuration
+
+```bash .env
+SESSION_DRIVER=database
+SESSION_TABLE=sessions
+SESSION_CONNECTION=mysql
+```
+
+## Queue Worker Setup
+
+### Running Queue Workers
+
+Queue workers process background jobs. Run them with:
+
+```bash
+php artisan queue:work --queue=high,standard,low --tries=3
+```
+
+### Supervisor Configuration
+
+Use Supervisor to keep queue workers running:
+
+```ini /etc/supervisor/conf.d/pterodactyl-worker.conf
+[program:pterodactyl-worker]
+process_name=%(program_name)s_%(process_num)02d
+command=php /var/www/pterodactyl/artisan queue:work --queue=high,standard,low --sleep=3 --tries=3 --max-time=3600
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+user=www-data
+numprocs=2
+redirect_stderr=true
+stdout_logfile=/var/www/pterodactyl/storage/logs/queue-worker.log
+stopwaitsecs=3600
+```
+
+Reload Supervisor after creating the config:
+
+```bash
+sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl start pterodactyl-worker:*
+```
+
+### Systemd Service
+
+Alternatively, use systemd:
+
+```ini /etc/systemd/system/pterodactyl-worker.service
+[Unit]
+Description=Pterodactyl Queue Worker
+After=redis.service
+
+[Service]
+User=www-data
+Group=www-data
+Restart=always
+ExecStart=/usr/bin/php /var/www/pterodactyl/artisan queue:work --queue=high,standard,low --sleep=3 --tries=3 --max-time=3600
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start the service:
+
+```bash
+sudo systemctl enable pterodactyl-worker
+sudo systemctl start pterodactyl-worker
+```
+
+### Worker Commands
+
+<CodeGroup>
+```bash Start Worker
+php artisan queue:work --queue=high,standard,low --tries=3
+```
+
+```bash Restart Workers
+php artisan queue:restart
+```
+
+```bash Monitor Queue
+php artisan queue:monitor redis:high,redis:standard,redis:low --max=100
+```
+
+```bash Failed Jobs
+# List failed jobs
+php artisan queue:failed
+
+# Retry failed job
+php artisan queue:retry JOB_ID
+
+# Retry all failed jobs
+php artisan queue:retry all
+
+# Delete failed job
+php artisan queue:forget JOB_ID
+
+# Clear all failed jobs
+php artisan queue:flush
+```
+</CodeGroup>
+
+## Installing Redis
+
+<CodeGroup>
+```bash Ubuntu/Debian
+sudo apt update
+sudo apt install redis-server
+
+# Enable and start Redis
+sudo systemctl enable redis-server
+sudo systemctl start redis-server
+```
+
+```bash RHEL/CentOS
+sudo yum install redis
+
+# Enable and start Redis
+sudo systemctl enable redis
+sudo systemctl start redis
+```
+</CodeGroup>
+
+### Securing Redis
+
+Edit `/etc/redis/redis.conf`:
+
+```bash /etc/redis/redis.conf
+# Set a password
+requirepass your_strong_password_here
+
+# Bind to localhost only (if Panel is on same server)
+bind 127.0.0.1
+
+# Disable dangerous commands
+rename-command FLUSHDB ""
+rename-command FLUSHALL ""
+rename-command CONFIG ""
+```
+
+Restart Redis:
+
+```bash
+sudo systemctl restart redis-server
+```
+
+## Installing PHPRedis Extension
+
+For better performance, install the phpredis extension:
+
+<CodeGroup>
+```bash Ubuntu/Debian
+sudo apt install php-redis
+sudo systemctl restart php8.3-fpm
+```
+
+```bash RHEL/CentOS
+sudo yum install php-pecl-redis
+sudo systemctl restart php-fpm
+```
+</CodeGroup>
+
+Update your `.env`:
+
+```bash .env
+REDIS_CLIENT=phpredis
+```
+
+## Clearing Cache
+
+<CodeGroup>
+```bash Clear All Cache
+php artisan cache:clear
+```
+
+```bash Clear Config Cache
+php artisan config:clear
+```
+
+```bash Clear Route Cache
+php artisan route:clear
+```
+
+```bash Clear View Cache
+php artisan view:clear
+```
+
+```bash Rebuild Cache
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
+</CodeGroup>
+
+## Performance Optimization
+
+### Cache Configuration
+
+In production, cache configuration files:
+
+```bash
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
+
+<Warning>
+  After caching, changes to `.env` won't take effect until you run `php artisan config:clear`.
+</Warning>
+
+### Multiple Queue Workers
+
+Run multiple workers for better throughput:
+
+```bash
+# In supervisor config
+numprocs=4
+```
+
+Or run workers for different queues:
+
+```bash
+php artisan queue:work --queue=high --tries=3
+php artisan queue:work --queue=standard --tries=3
+php artisan queue:work --queue=low --tries=3
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Redis Connection Refused">
+    **Solutions:**
+    ```bash
+    # Check if Redis is running
+    sudo systemctl status redis-server
+    
+    # Test Redis connection
+    redis-cli ping
+    # Should return: PONG
+    
+    # Test with password
+    redis-cli -a your_password ping
+    ```
+  </Accordion>
+
+  <Accordion title="Queue Jobs Not Processing">
+    **Possible causes:**
+    - Queue workers not running
+    - Worker died/crashed
+    - Queue connection misconfigured
+    
+    **Solutions:**
+    ```bash
+    # Check supervisor status
+    sudo supervisorctl status pterodactyl-worker:*
+    
+    # Restart workers
+    php artisan queue:restart
+    
+    # Check worker logs
+    tail -f storage/logs/queue-worker.log
+    ```
+  </Accordion>
+
+  <Accordion title="Session Data Lost">
+    **Possible causes:**
+    - Redis not running
+    - Session lifetime too short
+    - Different Redis database
+    
+    **Solutions:**
+    ```bash
+    # Verify session driver
+    php artisan tinker
+    >>> config('session.driver')
+    
+    # Check Redis sessions database
+    redis-cli
+    > SELECT 1
+    > KEYS *session*
+    ```
+  </Accordion>
+
+  <Accordion title="Cache Not Working">
+    **Solutions:**
+    ```bash
+    # Test cache
+    php artisan tinker
+    >>> Cache::put('test', 'value', 60)
+    >>> Cache::get('test')
+    
+    # Clear and rebuild cache
+    php artisan cache:clear
+    php artisan config:cache
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Monitoring
+
+### Redis Monitoring
+
+```bash
+# Monitor Redis commands in real-time
+redis-cli monitor
+
+# Get Redis info
+redis-cli info
+
+# Check memory usage
+redis-cli info memory
+
+# List all keys (careful in production!)
+redis-cli --scan
+```
+
+### Queue Monitoring
+
+```bash
+# Monitor queue size
+php artisan queue:monitor redis:standard --max=100
+
+# View failed jobs
+php artisan queue:failed
+
+# Queue statistics
+php artisan queue:work --queue=standard --once --verbose
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Redis" icon="database">
+    Redis provides the best performance for cache, queues, and sessions.
+  </Card>
+  
+  <Card title="Run Queue Workers" icon="gears">
+    Always run queue workers in production for background job processing.
+  </Card>
+  
+  <Card title="Monitor Workers" icon="chart-line">
+    Use Supervisor or systemd to keep queue workers running and auto-restart on failure.
+  </Card>
+  
+  <Card title="Secure Redis" icon="lock">
+    Always set a password and bind to localhost when possible.
+  </Card>
+</CardGroup>

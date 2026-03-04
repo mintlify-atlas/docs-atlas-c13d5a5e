@@ -1,0 +1,372 @@
+---
+title: 'SSH Keys'
+description: 'Manage SSH keys for secure SFTP access to your servers'
+icon: 'terminal'
+---
+
+## Overview
+
+SSH keys provide a secure method for authenticating to your servers via SFTP. Instead of using passwords, SSH keys use public-key cryptography to verify your identity.
+
+### Why Use SSH Keys?
+
+- **More Secure**: Cryptographic keys are much harder to crack than passwords
+- **Convenient**: No need to remember or type passwords for SFTP access
+- **Required for Automation**: Essential for automated deployment and backup scripts
+- **Better Access Control**: Each key can be individually managed and revoked
+
+## Supported Key Types
+
+Pterodactyl supports the following SSH key types:
+
+<CardGroup cols={2}>
+  <Card title="RSA" icon="check">
+    **Minimum 2048 bits required**
+    
+    Recommended: 4096 bits for maximum security
+  </Card>
+  
+  <Card title="ECDSA" icon="check">
+    **Fully Supported**
+    
+    Modern elliptic curve algorithm
+  </Card>
+  
+  <Card title="Ed25519" icon="check">
+    **Recommended**
+    
+    Fast, secure, and modern
+  </Card>
+  
+  <Card title="DSA" icon="xmark">
+    **Not Supported**
+    
+    Deprecated due to security concerns
+  </Card>
+</CardGroup>
+
+<Warning>
+**RSA Key Requirements:**
+- Minimum length: **2048 bits**
+- Keys shorter than 2048 bits will be rejected
+- DSA keys are not supported due to security vulnerabilities
+
+See `StoreSSHKeyRequest.php:44-50` for validation logic.
+</Warning>
+
+## Generating SSH Keys
+
+If you don't already have an SSH key, you can generate one using the `ssh-keygen` command.
+
+### Generate Ed25519 Key (Recommended)
+
+```bash
+ssh-keygen -t ed25519 -C "your_email@example.com"
+```
+
+### Generate RSA Key (4096 bits)
+
+```bash
+ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
+```
+
+### Generation Process
+
+<Steps>
+  <Step title="Run the Command">
+    Execute one of the `ssh-keygen` commands above in your terminal.
+  </Step>
+  
+  <Step title="Choose Location">
+    When prompted, press Enter to save the key in the default location (`~/.ssh/id_ed25519` or `~/.ssh/id_rsa`).
+    
+    Or specify a custom path:
+    ```
+    Enter file in which to save the key: /home/user/.ssh/pterodactyl_key
+    ```
+  </Step>
+  
+  <Step title="Set Passphrase (Optional)">
+    Enter a passphrase for additional security, or press Enter for no passphrase.
+    
+    <Tip>
+    Using a passphrase adds an extra layer of security. Your SSH agent can remember it for the session.
+    </Tip>
+  </Step>
+  
+  <Step title="Keys Generated">
+    You'll now have two files:
+    - **Private key**: `id_ed25519` (keep this secret!)
+    - **Public key**: `id_ed25519.pub` (this is what you'll upload)
+  </Step>
+</Steps>
+
+## Adding an SSH Key
+
+Once you have an SSH key pair, add the public key to your Pterodactyl account.
+
+<Steps>
+  <Step title="Copy Your Public Key">
+    Display and copy your public key:
+    
+    ```bash
+    cat ~/.ssh/id_ed25519.pub
+    ```
+    
+    The output will look like:
+    ```
+    ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQd... your_email@example.com
+    ```
+    
+    Copy the entire line.
+  </Step>
+  
+  <Step title="Navigate to SSH Keys Settings">
+    Go to **Account Settings** and select the **SSH Keys** section.
+  </Step>
+  
+  <Step title="Click Add SSH Key">
+    Click the **Add SSH Key** button.
+  </Step>
+  
+  <Step title="Enter Key Details">
+    - **Name**: Give your key a descriptive name (e.g., "Work Laptop", "Home Desktop")
+    - **Public Key**: Paste your entire public key
+    
+    <Note>
+    The system will automatically extract and validate the key format, converting it to PKCS8 format for storage (see `StoreSSHKeyRequest.php:62-65`).
+    </Note>
+  </Step>
+  
+  <Step title="Add Key">
+    Click **Add SSH Key** to save it.
+  </Step>
+  
+  <Step title="Verify">
+    Your key will be added and you'll see its fingerprint displayed. The fingerprint is a SHA256 hash of your public key.
+  </Step>
+</Steps>
+
+## SSH Key Validation
+
+When you upload a public key, Pterodactyl performs several validation checks:
+
+### Format Validation
+
+```php
+try {
+    $this->key = PublicKeyLoader::loadPublicKey($this->input('public_key'));
+} catch (NoKeyLoadedException $exception) {
+    $this->validator->errors()->add('public_key', 'The public key provided is not valid.');
+    return;
+}
+```
+
+### DSA Key Rejection
+
+```php
+if ($this->key instanceof DSA) {
+    $this->validator->errors()->add('public_key', 'DSA keys are not supported.');
+}
+```
+
+### RSA Length Requirement
+
+```php
+if ($this->key instanceof RSA && $this->key->getLength() < 2048) {
+    $this->validator->errors()->add('public_key', 'RSA keys must be at least 2048 bytes in length.');
+}
+```
+
+### Duplicate Detection
+
+```php
+$fingerprint = $this->key->getFingerprint('sha256');
+if ($this->user()->sshKeys()->where('fingerprint', $fingerprint)->exists()) {
+    $this->validator->errors()->add('public_key', 'The public key provided already exists on your account.');
+}
+```
+
+## Understanding Fingerprints
+
+Each SSH key has a unique fingerprint - a SHA256 hash that identifies the key. This is useful for:
+
+- Verifying you're using the correct key
+- Identifying keys across different systems
+- Detecting duplicate keys
+
+You can see your key's fingerprint:
+
+```bash
+ssh-keygen -lf ~/.ssh/id_ed25519.pub
+```
+
+Output:
+```
+256 SHA256:AbCdEfGhIjKlMnOpQrStUvWxYz0123456789 your_email@example.com (ED25519)
+```
+
+## Using SSH Keys for SFTP Access
+
+Once you've added your SSH key, you can use it to connect via SFTP.
+
+### Command Line SFTP
+
+```bash
+sftp -P 2022 username.abc123@sftp.example.com
+```
+
+Replace:
+- `2022` with your server's SFTP port
+- `username` with your Pterodactyl username
+- `abc123` with your server identifier
+- `sftp.example.com` with your panel's SFTP address
+
+### FileZilla Configuration
+
+<Steps>
+  <Step title="Open Site Manager">
+    In FileZilla, go to **File → Site Manager**
+  </Step>
+  
+  <Step title="Add New Site">
+    Click **New Site** and configure:
+    - **Protocol**: SFTP - SSH File Transfer Protocol
+    - **Host**: Your SFTP address
+    - **Port**: Your SFTP port (usually 2022)
+    - **Logon Type**: Key file
+    - **User**: username.serverid
+    - **Key file**: Browse to your private key file
+  </Step>
+  
+  <Step title="Connect">
+    Click **Connect** to establish the connection
+  </Step>
+</Steps>
+
+### WinSCP Configuration
+
+1. Create a new session
+2. Set **File protocol** to SFTP
+3. Enter host and port
+4. Enter username in format: `username.serverid`
+5. Click **Advanced** → **SSH** → **Authentication**
+6. Select your private key file
+7. Click **OK** and **Login**
+
+## Managing SSH Keys
+
+### View Your SSH Keys
+
+In the SSH Keys section, you can see:
+- **Name**: The descriptive name you provided
+- **Fingerprint**: The SHA256 fingerprint of the key
+- **Created**: When the key was added
+
+<Note>
+The actual public key is stored in PKCS8 format in the database, but you'll only see the fingerprint in the UI for security and brevity.
+</Note>
+
+### Delete an SSH Key
+
+When you no longer use a device or want to revoke access:
+
+<Steps>
+  <Step title="Locate the Key">
+    Find the SSH key you want to delete in your SSH Keys list.
+  </Step>
+  
+  <Step title="Click Delete">
+    Click the delete icon next to the key.
+  </Step>
+  
+  <Step title="Confirm Deletion">
+    Confirm that you want to delete the key.
+  </Step>
+</Steps>
+
+<Warning>
+Deleting an SSH key immediately revokes access. Any SFTP connections using this key will be disconnected and future connection attempts will fail.
+</Warning>
+
+## Activity Logging
+
+All SSH key operations are logged:
+
+- **Key Added**: `user:ssh-key.create` (includes fingerprint)
+- **Key Deleted**: `user:ssh-key.delete` (includes fingerprint)
+
+You can review these events in your activity feed.
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Strong Key Types">
+    Prefer Ed25519 keys for the best combination of security and performance. If using RSA, use at least 4096 bits.
+  </Accordion>
+  
+  <Accordion title="Protect Your Private Key">
+    - **Never share** your private key file
+    - **Set proper permissions**: `chmod 600 ~/.ssh/id_ed25519`
+    - **Use a passphrase** to encrypt the private key
+    - **Backup securely**: Keep encrypted backups of your private key
+  </Accordion>
+  
+  <Accordion title="Use Descriptive Names">
+    Name your keys based on the device or purpose: "Work Laptop 2024", "Home Desktop", "CI/CD Pipeline". This makes it easier to manage multiple keys.
+  </Accordion>
+  
+  <Accordion title="One Key Per Device">
+    Generate a separate key pair for each device. This allows you to revoke access from a single device without affecting others.
+  </Accordion>
+  
+  <Accordion title="Regular Audits">
+    Periodically review your SSH keys and remove any that are no longer needed or associated with devices you no longer use.
+  </Accordion>
+  
+  <Accordion title="Rotate Keys Periodically">
+    Generate new SSH keys periodically (e.g., annually) and remove old ones. This limits the impact of potential key compromise.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### "The public key provided is not valid"
+
+- Ensure you're copying the **public key** (.pub file), not the private key
+- Verify the key format is correct (should start with `ssh-rsa`, `ssh-ed25519`, or `ecdsa-sha2-`)
+- Make sure you copied the entire key, including the key type and email
+
+### "DSA keys are not supported"
+
+DSA keys are deprecated due to security vulnerabilities. Generate a new Ed25519 or RSA key instead.
+
+### "RSA keys must be at least 2048 bytes in length"
+
+Your RSA key is too short. Generate a new key with at least 2048 bits (4096 recommended):
+
+```bash
+ssh-keygen -t rsa -b 4096
+```
+
+### "The public key provided already exists on your account"
+
+This key has already been added to your account. Each key can only be added once. If you need to use the same key on multiple devices, you can - just don't add it multiple times to Pterodactyl.
+
+### SFTP Connection Fails
+
+- Verify your SSH key has the `file.sftp` permission on the server
+- Check that you're using the correct username format: `username.serverid`
+- Confirm the SFTP port and host are correct
+- Ensure your private key has proper permissions: `chmod 600 ~/.ssh/id_ed25519`
+- Check that your key wasn't deleted or revoked
+
+## API Endpoint Reference
+
+```http
+GET    /api/client/account/ssh-keys            # List all SSH keys
+POST   /api/client/account/ssh-keys            # Add new SSH key
+DELETE /api/client/account/ssh-keys            # Delete SSH key by fingerprint
+```
+
+For detailed API documentation, see the [SSH Keys Reference](/api/client/account).

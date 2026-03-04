@@ -1,0 +1,468 @@
+---
+title: Server Settings
+description: Configure server name, description, Docker image, and reinstall options
+---
+
+Server settings allow you to customize your server's identity and perform maintenance operations like renaming, changing descriptions, updating Docker images, and reinstalling the server.
+
+## Server Information
+
+View basic server information:
+
+```bash Get Server Details
+GET /api/client/servers/{server}
+```
+
+```json Response
+{
+  "object": "server",
+  "attributes": {
+    "uuid": "7e8e8f18-25fa-4f9e-a13d-4d1c8e8b8f9e",
+    "name": "My Minecraft Server",
+    "description": "A survival server for friends and family",
+    "status": null,
+    "node": "Node 01",
+    "sftp_details": {
+      "ip": "node01.example.com",
+      "port": 2022
+    },
+    "limits": {
+      "memory": 4096,
+      "swap": 512,
+      "disk": 10240,
+      "io": 500,
+      "cpu": 200,
+      "threads": null
+    }
+  }
+}
+```
+
+## Renaming Server
+
+Change your server's name and description:
+
+```bash Rename Server
+POST /api/client/servers/{server}/settings/rename
+Content-Type: application/json
+
+{
+  "name": "Minecraft Survival World",
+  "description": "Updated survival server with new plugins"
+}
+```
+
+```json Success
+HTTP/1.1 204 No Content
+```
+
+<Steps>
+  <Step title="Navigate to Settings">
+    Go to the Settings tab in your server panel.
+  </Step>
+  
+  <Step title="Edit Name">
+    Enter a new server name (1-191 characters).
+  </Step>
+  
+  <Step title="Update Description">
+    Optionally update the description to reflect server purpose or changes.
+  </Step>
+  
+  <Step title="Save Changes">
+    Click Save. Changes are immediate and don't require a restart.
+  </Step>
+</Steps>
+
+### Validation Rules
+
+```json Name Validation
+{
+  "name": "required|string|min:1|max:191",
+  "description": "string"
+}
+```
+
+- **Name:** Required, 1-191 characters
+- **Description:** Optional, any length
+
+<Note>
+Renaming doesn't affect server files or functionality - it only changes how the server appears in the panel.
+</Note>
+
+## Docker Image Management
+
+Docker images define the runtime environment for your server.
+
+### Available Images
+
+Check which Docker images are available:
+
+```bash
+GET /api/client/servers/{server}/startup
+```
+
+```json Response
+{
+  "meta": {
+    "docker_images": {
+      "Java 17": "ghcr.io/pterodactyl/yolks:java_17",
+      "Java 11": "ghcr.io/pterodactyl/yolks:java_11",
+      "Java 8": "ghcr.io/pterodactyl/yolks:java_8"
+    }
+  }
+}
+```
+
+### Changing Docker Image
+
+Update to a different Docker image:
+
+```bash Update Docker Image
+POST /api/client/servers/{server}/settings/docker-image
+Content-Type: application/json
+
+{
+  "docker_image": "ghcr.io/pterodactyl/yolks:java_17"
+}
+```
+
+```json Success
+HTTP/1.1 204 No Content
+```
+
+<Warning>
+Changing Docker images requires restarting your server. Ensure the new image is compatible with your server software and plugins.
+</Warning>
+
+### When to Change Images
+
+<AccordionGroup>
+  <Accordion title="Java Version Requirements">
+    Different Minecraft versions require different Java versions:
+    
+    - **Minecraft 1.17+:** Requires Java 17
+    - **Minecraft 1.16.5:** Works with Java 11 or 8
+    - **Minecraft 1.12.2 and older:** Requires Java 8
+    
+    Switch images when updating server versions.
+  </Accordion>
+  
+  <Accordion title="Performance Optimization">
+    Newer Java versions often have better performance:
+    - Java 17 has improved garbage collection
+    - Better memory management
+    - Faster startup times
+  </Accordion>
+  
+  <Accordion title="Plugin Compatibility">
+    Some plugins require specific Java versions. Check plugin documentation before changing.
+  </Accordion>
+</AccordionGroup>
+
+### Restrictions
+
+You can only change to images defined in the egg configuration:
+
+```json Error: Custom Image Not Allowed
+HTTP/1.1 400 Bad Request
+
+{
+  "errors": [
+    {
+      "code": "BadRequestHttpException",
+      "detail": "This server's Docker image has been manually set by an administrator and cannot be updated."
+    }
+  ]
+}
+```
+
+If the image was manually set by an admin, users cannot change it.
+
+## Server Reinstallation
+
+Reinstall your server to start fresh:
+
+```bash Reinstall Server
+POST /api/client/servers/{server}/settings/reinstall
+```
+
+```json Success
+HTTP/1.1 202 Accepted
+```
+
+<Warning>
+**Reinstalling deletes ALL server files.** This action is permanent and cannot be undone. Create a backup before reinstalling.
+</Warning>
+
+### Reinstallation Process
+
+<Steps>
+  <Step title="Backup Your Server">
+    Create a backup of all important files:
+    ```bash
+    POST /api/client/servers/{server}/backups
+    ```
+  </Step>
+  
+  <Step title="Initiate Reinstall">
+    Click Reinstall Server in the settings or use the API.
+  </Step>
+  
+  <Step title="Server Goes Offline">
+    Server status changes to `installing`. All actions are disabled.
+  </Step>
+  
+  <Step title="Installation Runs">
+    The egg's installation script executes:
+    - Deletes existing files
+    - Downloads fresh server files
+    - Runs initial setup commands
+  </Step>
+  
+  <Step title="Restore from Backup">
+    After installation completes, restore your backup if needed:
+    ```bash
+    POST /api/client/servers/{server}/backups/{backup}/restore
+    ```
+  </Step>
+</Steps>
+
+### When to Reinstall
+
+<AccordionGroup>
+  <Accordion title="Corrupted Server Files">
+    If core server files are corrupted and causing crashes:
+    - Reinstall provides clean server files
+    - Restore your worlds/configs from backup after
+  </Accordion>
+  
+  <Accordion title="Switching Server Types">
+    When changing between server types:
+    - Vanilla to Spigot
+    - Spigot to Paper
+    - Paper to Forge
+    
+    Note: May require admin to change egg first.
+  </Accordion>
+  
+  <Accordion title="Starting Fresh">
+    Remove all customizations and start over:
+    - Clean slate for testing
+    - Remove all plugins/mods
+    - Reset to default configuration
+  </Accordion>
+  
+  <Accordion title="Failed Installation">
+    If initial server installation failed:
+    - Status shows `install_failed`
+    - Reinstall runs installation script again
+  </Accordion>
+</AccordionGroup>
+
+### What Gets Deleted
+
+Reinstallation removes:
+- All server files
+- Game worlds
+- Configuration files
+- Plugins/mods
+- Logs and cache
+
+Reinstallation preserves:
+- Server settings (name, limits)
+- Database connections
+- Network allocations
+- Schedules and backups (the backup files themselves)
+- Startup variables
+
+## SFTP Access
+
+SFTP (SSH File Transfer Protocol) provides direct file access:
+
+```json SFTP Details
+{
+  "sftp_details": {
+    "ip": "node01.example.com",
+    "port": 2022
+  }
+}
+```
+
+### Connecting via SFTP
+
+<CodeGroup>
+```bash FileZilla
+Host: sftp://node01.example.com
+Port: 2022
+Username: {your_panel_username}.{server_id}
+Password: {your_panel_password}
+```
+
+```bash WinSCP
+File Protocol: SFTP
+Host: node01.example.com
+Port: 2022
+Username: admin.7e8e8f18
+Password: your_panel_password
+```
+
+```bash Command Line
+sftp -P 2022 admin.7e8e8f18@node01.example.com
+```
+</CodeGroup>
+
+### SFTP Username Format
+
+```
+{panel_username}.{server_id}
+```
+
+Example:
+- Panel username: `admin`
+- Server UUID: `7e8e8f18-25fa-4f9e-a13d-4d1c8e8b8f9e`
+- SFTP username: `admin.7e8e8f18`
+
+<Note>
+The server ID is the first 8 characters of the UUID. You must use your panel password (not a separate SFTP password).
+</Note>
+
+## Server Debug Information
+
+Useful information for troubleshooting:
+
+```json Debug Info
+{
+  "uuid": "7e8e8f18-25fa-4f9e-a13d-4d1c8e8b8f9e",
+  "identifier": "7e8e8f18",
+  "node": "Node 01",
+  "egg": "Minecraft Java Edition",
+  "docker_image": "ghcr.io/pterodactyl/yolks:java_17",
+  "created_at": "2025-01-10T08:00:00+00:00",
+  "installed_at": "2025-01-10T08:05:32+00:00"
+}
+```
+
+Include this information when requesting support.
+
+## Activity Logging
+
+Settings changes are logged:
+
+```json Example Logs
+{
+  "event": "server:settings.rename",
+  "properties": {
+    "old": "My Minecraft Server",
+    "new": "Minecraft Survival World"
+  }
+}
+
+{
+  "event": "server:settings.description",
+  "properties": {
+    "old": "A survival server",
+    "new": "Updated survival server with new plugins"
+  }
+}
+
+{
+  "event": "server:startup.image",
+  "properties": {
+    "old": "ghcr.io/pterodactyl/yolks:java_11",
+    "new": "ghcr.io/pterodactyl/yolks:java_17"
+  }
+}
+
+{
+  "event": "server:reinstall"
+}
+```
+
+## Permissions Required
+
+Settings operations require specific permissions:
+
+| Operation | Permission |
+|-----------|------------|
+| Rename server | `settings.rename` |
+| Change Docker image | `settings.docker-image` |
+| Reinstall server | `settings.reinstall` |
+| View SFTP details | `file.sftp` |
+
+<Note>
+Server owners always have all permissions. Subusers must be granted these permissions explicitly.
+</Note>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Descriptive Server Names">
+    Use clear, descriptive names:
+    - Good: "Minecraft 1.20 Survival", "CS:GO Competitive"
+    - Bad: "Server 1", "Test", "asdf"
+    
+    Makes managing multiple servers easier.
+  </Accordion>
+  
+  <Accordion title="Update Descriptions">
+    Keep descriptions current:
+    - Server type and version
+    - Active plugins/mods
+    - Special rules or features
+    - Last major update date
+  </Accordion>
+  
+  <Accordion title="Always Backup Before Reinstall">
+    Create a backup before reinstalling:
+    ```bash
+    # Create backup
+    POST /api/client/servers/{server}/backups
+    
+    # Wait for completion, then reinstall
+    POST /api/client/servers/{server}/settings/reinstall
+    ```
+  </Accordion>
+  
+  <Accordion title="Test Docker Image Changes">
+    Before changing Docker images on production servers:
+    1. Test on a development/staging server
+    2. Verify all plugins work
+    3. Check for errors in logs
+    4. Apply to production during off-peak hours
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Cannot Rename Server">
+    - Verify you have `settings.rename` permission
+    - Check name length (max 191 characters)
+    - Ensure name isn't empty
+    - Try different characters if special chars fail
+  </Accordion>
+  
+  <Accordion title="Docker Image Change Fails">
+    - Ensure image is in allowed list
+    - Check if admin manually set image
+    - Verify you have permission
+    - Restart server after change
+  </Accordion>
+  
+  <Accordion title="Reinstall Stuck">
+    If reinstall doesn't complete:
+    - Check Wings daemon is running
+    - Review Wings logs for errors
+    - Verify node has internet access (to download files)
+    - Contact administrator if stuck >30 minutes
+  </Accordion>
+  
+  <Accordion title="SFTP Connection Failed">
+    - Verify SFTP port is correct
+    - Check username format: `username.serverid`
+    - Use panel password (not separate SFTP password)
+    - Ensure Wings SFTP server is running
+    - Check firewall allows SFTP port (usually 2022)
+  </Accordion>
+</AccordionGroup>

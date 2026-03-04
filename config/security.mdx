@@ -1,0 +1,509 @@
+---
+title: Security Settings
+description: Configure SSL/TLS, trusted proxies, sessions, and security headers for Pterodactyl Panel
+---
+
+Proper security configuration is critical for protecting your Pterodactyl Panel installation. This guide covers SSL/TLS, proxy configuration, session security, and other security-related settings.
+
+## SSL/TLS Configuration
+
+### Application URL
+
+Always use HTTPS in production:
+
+```bash .env
+APP_URL=https://panel.example.com
+```
+
+<Warning>
+  **Critical:** Using HTTP in production exposes user credentials and session cookies to interception.
+</Warning>
+
+### Force HTTPS
+
+The Panel automatically enforces HTTPS when `APP_URL` uses `https://`. Ensure your web server (Nginx/Apache) is configured to redirect HTTP to HTTPS.
+
+<CodeGroup>
+```nginx Nginx
+server {
+    listen 80;
+    server_name panel.example.com;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name panel.example.com;
+    
+    ssl_certificate /etc/letsencrypt/live/panel.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/panel.example.com/privkey.pem;
+    ssl_session_cache shared:SSL:10m;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256";
+    ssl_prefer_server_ciphers on;
+    
+    # ... rest of configuration
+}
+```
+
+```apache Apache
+<VirtualHost *:80>
+    ServerName panel.example.com
+    Redirect permanent / https://panel.example.com/
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName panel.example.com
+    
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/panel.example.com/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/panel.example.com/privkey.pem
+    SSLProtocol -all +TLSv1.2 +TLSv1.3
+    SSLHonorCipherOrder on
+    SSLCipherSuite ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256
+    
+    # ... rest of configuration
+</VirtualHost>
+```
+</CodeGroup>
+
+## Trusted Proxies
+
+### What are Trusted Proxies?
+
+When the Panel runs behind a reverse proxy (Cloudflare, load balancer, etc.), the Panel sees the proxy's IP address instead of the client's. Configuring trusted proxies allows the Panel to read the real client IP from proxy headers.
+
+### Configuration
+
+```bash .env
+TRUSTED_PROXIES=*
+```
+
+<ParamField path="TRUSTED_PROXIES" type="string">
+  Comma-separated list of trusted proxy IP addresses or CIDR ranges.
+  
+  **Special values:**
+  - `*` - Trust the directly connected proxy only
+  - `**` - Trust all proxies in the chain
+  - `192.168.1.1,10.0.0.0/8` - Specific IPs or CIDR ranges
+</ParamField>
+
+### Common Configurations
+
+<CodeGroup>
+```bash Cloudflare
+# Trust Cloudflare's IP ranges
+TRUSTED_PROXIES=173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,141.101.64.0/18,108.162.192.0/18,190.93.240.0/20,188.114.96.0/20,197.234.240.0/22,198.41.128.0/17,162.158.0.0/15,104.16.0.0/13,104.24.0.0/14,172.64.0.0/13,131.0.72.0/22
+```
+
+```bash Single Proxy
+# Trust a single reverse proxy IP
+TRUSTED_PROXIES=192.168.1.100
+```
+
+```bash Multiple Proxies
+# Trust specific proxy IPs
+TRUSTED_PROXIES=192.168.1.100,192.168.1.101,10.0.0.50
+```
+
+```bash Private Network
+# Trust all proxies in private network
+TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+```
+
+```bash Any Proxy (Development Only)
+# Trust any directly connected proxy
+TRUSTED_PROXIES=*
+```
+</CodeGroup>
+
+<Warning>
+  **Security Risk:** Only set `TRUSTED_PROXIES=**` if you fully control all proxies in the chain. Malicious proxies can spoof client IPs.
+</Warning>
+
+### Verifying Proxy Configuration
+
+Check if the Panel sees the correct client IP:
+
+```bash
+php artisan tinker
+```
+
+```php
+request()->ip()
+// Should return your actual IP, not the proxy's IP
+```
+
+## Session Security
+
+### Session Configuration
+
+```bash .env
+SESSION_DRIVER=redis
+SESSION_LIFETIME=720
+SESSION_ENCRYPT=true
+SESSION_SECURE_COOKIE=true
+SESSION_HTTP_ONLY=true
+SESSION_SAME_SITE=lax
+```
+
+<ParamField path="SESSION_DRIVER" type="string" default="redis">
+  Session storage driver. Use `redis` or `database` in production, never `file`.
+</ParamField>
+
+<ParamField path="SESSION_LIFETIME" type="integer" default="720">
+  Session lifetime in minutes (12 hours by default).
+</ParamField>
+
+<ParamField path="SESSION_ENCRYPT" type="boolean" default="true">
+  Encrypt session data before storage.
+  
+  <Warning>
+    Always keep this enabled in production.
+  </Warning>
+</ParamField>
+
+<ParamField path="SESSION_SECURE_COOKIE" type="boolean">
+  Only send session cookies over HTTPS. Auto-detected from `APP_URL` if not set.
+  
+  <Warning>
+    Must be enabled when using HTTPS, or users will be logged out.
+  </Warning>
+</ParamField>
+
+<ParamField path="SESSION_HTTP_ONLY" type="boolean" default="true">
+  Prevent JavaScript from accessing session cookies.
+  
+  <Warning>
+    **Never disable!** This protects against XSS attacks stealing session cookies.
+  </Warning>
+</ParamField>
+
+<ParamField path="SESSION_SAME_SITE" type="string" default="lax">
+  SameSite cookie attribute. Options:
+  - `lax` - Balanced security (recommended)
+  - `strict` - Maximum security, may break some workflows
+  - `none` - Allow cross-site requests (requires `secure` flag)
+</ParamField>
+
+### Session Cookie Configuration
+
+```bash .env
+SESSION_COOKIE=pterodactyl_session
+SESSION_DOMAIN=
+SESSION_PATH=/
+```
+
+<ParamField path="SESSION_COOKIE" type="string">
+  Session cookie name. Auto-generated from `APP_NAME` if not set.
+</ParamField>
+
+<ParamField path="SESSION_DOMAIN" type="string">
+  Cookie domain. Leave empty to use the current domain.
+  
+  <Info>
+    Set to `.example.com` (with leading dot) to share sessions across subdomains.
+  </Info>
+</ParamField>
+
+<ParamField path="SESSION_PATH" type="string" default="/">
+  Cookie path. Usually should remain `/`.
+</ParamField>
+
+## Encryption Key Management
+
+### Application Key
+
+```bash .env
+APP_KEY=base64:YOUR_ENCRYPTION_KEY_HERE
+```
+
+The `APP_KEY` is used to encrypt:
+- Session data
+- Cookies
+- Database encrypted fields
+- Signed URLs
+
+<Warning>
+  **Never share or commit your `APP_KEY` to version control!**
+  
+  Changing this key will:
+  - Log out all users
+  - Invalidate all encrypted data
+  - Break password reset tokens
+</Warning>
+
+### Generating a New Key
+
+```bash
+php artisan key:generate --force
+```
+
+### Key Rotation
+
+To rotate the encryption key without breaking existing data:
+
+1. Add the current key to `APP_PREVIOUS_KEYS`:
+   ```bash .env
+   APP_PREVIOUS_KEYS=base64:OLD_KEY_HERE
+   ```
+
+2. Generate a new key:
+   ```bash
+   php artisan key:generate --force
+   ```
+
+3. Laravel will attempt to decrypt data with old keys if the current key fails.
+
+## Debug Mode
+
+```bash .env
+APP_DEBUG=false
+```
+
+<ParamField path="APP_DEBUG" type="boolean" default="false">
+  Enable detailed error messages and stack traces.
+</ParamField>
+
+<Warning>
+  **Critical Security Risk!** Debug mode exposes:
+  - Environment variables (including passwords)
+  - Database queries
+  - File paths
+  - Application internals
+  
+  **NEVER enable in production!**
+</Warning>
+
+### Safe Error Reporting
+
+For production error tracking, use error monitoring services:
+
+```bash .env
+APP_DEBUG=false
+APP_REPORT_ALL_EXCEPTIONS=false
+LOG_LEVEL=error
+```
+
+## Password Security
+
+The Panel uses bcrypt for password hashing. No additional configuration needed.
+
+### Password Requirements
+
+Password requirements are enforced at the application level:
+- Minimum 8 characters
+- No maximum length
+- No character requirements (allowing passphrases)
+
+### Two-Factor Authentication
+
+Encourage users to enable 2FA:
+1. User account → Security → Two-Factor Authentication
+2. Scan QR code with authenticator app
+3. Enter verification code
+
+Consider making 2FA mandatory for administrator accounts.
+
+## Security Headers
+
+Configure security headers in your web server:
+
+<CodeGroup>
+```nginx Nginx Security Headers
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-Frame-Options "SAMEORIGIN" always;
+add_header X-XSS-Protection "1; mode=block" always;
+add_header Referrer-Policy "same-origin" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self';" always;
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+```
+
+```apache Apache Security Headers
+Header always set X-Content-Type-Options "nosniff"
+Header always set X-Frame-Options "SAMEORIGIN"
+Header always set X-XSS-Protection "1; mode=block"
+Header always set Referrer-Policy "same-origin"
+Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self';"
+Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+```
+</CodeGroup>
+
+### Header Explanations
+
+<AccordionGroup>
+  <Accordion title="X-Content-Type-Options">
+    Prevents browsers from MIME-sniffing responses away from the declared content-type.
+    
+    `X-Content-Type-Options: nosniff`
+  </Accordion>
+
+  <Accordion title="X-Frame-Options">
+    Prevents clickjacking attacks by controlling whether the page can be embedded in frames.
+    
+    `X-Frame-Options: SAMEORIGIN` - Allow framing only from the same origin.
+  </Accordion>
+
+  <Accordion title="X-XSS-Protection">
+    Enables browser's XSS filtering (legacy, but still useful for older browsers).
+    
+    `X-XSS-Protection: 1; mode=block`
+  </Accordion>
+
+  <Accordion title="Referrer-Policy">
+    Controls how much referrer information is included with requests.
+    
+    `Referrer-Policy: same-origin` - Only send referrer for same-origin requests.
+  </Accordion>
+
+  <Accordion title="Content-Security-Policy">
+    Controls which resources the browser is allowed to load, preventing XSS and injection attacks.
+    
+    <Note>
+      The Panel requires `unsafe-inline` and `unsafe-eval` for JavaScript functionality.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Strict-Transport-Security (HSTS)">
+    Forces browsers to only use HTTPS connections.
+    
+    `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`
+    
+    <Warning>
+      Only enable HSTS after verifying HTTPS works correctly. Once enabled, browsers will refuse HTTP connections for the specified duration.
+    </Warning>
+  </Accordion>
+</AccordionGroup>
+
+## Firewall Configuration
+
+### Required Ports
+
+Only expose necessary ports to the internet:
+
+| Port | Protocol | Purpose | Public Access |
+|------|----------|---------|---------------|
+| 80 | HTTP | Redirect to HTTPS | Yes |
+| 443 | HTTPS | Panel web interface | Yes |
+| 3306 | TCP | MySQL/MariaDB | **No** |
+| 6379 | TCP | Redis | **No** |
+
+<Warning>
+  **Never expose database or Redis ports to the public internet!**
+</Warning>
+
+### UFW Firewall
+
+```bash
+# Allow HTTP and HTTPS
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+
+# Deny database ports from external access
+sudo ufw deny 3306/tcp
+sudo ufw deny 6379/tcp
+
+# Enable firewall
+sudo ufw enable
+```
+
+## File Permissions
+
+Proper file permissions prevent unauthorized access:
+
+```bash
+# Set ownership
+chown -R www-data:www-data /var/www/pterodactyl
+
+# Set directory permissions
+find /var/www/pterodactyl -type d -exec chmod 755 {} \;
+
+# Set file permissions
+find /var/www/pterodactyl -type f -exec chmod 644 {} \;
+
+# Make storage and cache writable
+chmod -R 770 /var/www/pterodactyl/storage
+chmod -R 770 /var/www/pterodactyl/bootstrap/cache
+```
+
+<Warning>
+  Never set permissions to `777` or run the Panel as root!
+</Warning>
+
+## Security Checklist
+
+<Steps>
+  <Step title="Use HTTPS">
+    Configure SSL/TLS with a valid certificate (Let's Encrypt recommended).
+  </Step>
+  
+  <Step title="Disable Debug Mode">
+    Set `APP_DEBUG=false` in production.
+  </Step>
+  
+  <Step title="Secure Environment File">
+    Set `.env` permissions to `600` and never commit to version control.
+    ```bash
+    chmod 600 /var/www/pterodactyl/.env
+    ```
+  </Step>
+  
+  <Step title="Configure Trusted Proxies">
+    Set `TRUSTED_PROXIES` if behind a reverse proxy or CDN.
+  </Step>
+  
+  <Step title="Enable Session Security">
+    Verify `SESSION_ENCRYPT`, `SESSION_SECURE_COOKIE`, and `SESSION_HTTP_ONLY` are enabled.
+  </Step>
+  
+  <Step title="Secure Database Access">
+    Use strong passwords and restrict access to localhost or private network.
+  </Step>
+  
+  <Step title="Secure Redis">
+    Set `REDIS_PASSWORD` and bind to localhost.
+  </Step>
+  
+  <Step title="Configure Firewall">
+    Only expose ports 80 and 443 to the public internet.
+  </Step>
+  
+  <Step title="Set File Permissions">
+    Follow the principle of least privilege for file permissions.
+  </Step>
+  
+  <Step title="Enable 2FA">
+    Enable two-factor authentication for all administrator accounts.
+  </Step>
+  
+  <Step title="Regular Updates">
+    Keep the Panel, PHP, and system packages up to date.
+  </Step>
+  
+  <Step title="Monitor Logs">
+    Regularly review logs for suspicious activity:
+    ```bash
+    tail -f /var/www/pterodactyl/storage/logs/laravel-*.log
+    ```
+  </Step>
+</Steps>
+
+## Additional Resources
+
+<CardGroup cols={2}>
+  <Card title="Let's Encrypt SSL" icon="lock" href="https://letsencrypt.org/">
+    Free SSL/TLS certificates with automatic renewal.
+  </Card>
+  
+  <Card title="Mozilla SSL Config" icon="shield" href="https://ssl-config.mozilla.org/">
+    Generate secure SSL configurations for your web server.
+  </Card>
+  
+  <Card title="Security Headers" icon="helmet-safety" href="https://securityheaders.com/">
+    Test your site's security headers.
+  </Card>
+  
+  <Card title="SSL Labs Test" icon="vial" href="https://www.ssllabs.com/ssltest/">
+    Test your SSL/TLS configuration.
+  </Card>
+</CardGroup>

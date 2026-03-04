@@ -1,0 +1,483 @@
+---
+title: 'Subusers'
+description: 'Add and manage subusers with granular permissions for your servers'
+icon: 'user-plus'
+---
+
+## Overview
+
+Subusers allow you to grant other users access to your servers with specific, limited permissions. This is useful for:
+
+- **Team collaboration**: Give team members access to manage servers
+- **Support access**: Allow support staff to troubleshoot issues
+- **Limited access**: Grant developers access without full administrative rights
+- **Delegation**: Assign specific responsibilities to different users
+
+<Note>
+Subusers are server-specific. Each subuser assignment is tied to a single server, and you can grant different permissions on different servers.
+</Note>
+
+## Understanding Permissions
+
+Pterodactyl uses a granular permission system with permissions organized into categories:
+
+### Permission Categories
+
+<AccordionGroup>
+  <Accordion title="Websocket" icon="plug">
+    **websocket.connect** - Allows connecting to the server console websocket
+    
+    This permission is **automatically granted** to all subusers and enables viewing console output and real-time server stats.
+  </Accordion>
+  
+  <Accordion title="Control" icon="sliders">
+    Control the server's power state and send commands:
+    
+    - **control.console** - Send commands to the server console
+    - **control.start** - Start the server if stopped
+    - **control.stop** - Stop a running server
+    - **control.restart** - Restart the server
+  </Accordion>
+  
+  <Accordion title="User Management" icon="users">
+    Manage other subusers (cannot edit own account or grant permissions they don't have):
+    
+    - **user.create** - Create new subusers
+    - **user.read** - View subusers and their permissions
+    - **user.update** - Modify other subusers
+    - **user.delete** - Delete subusers
+  </Accordion>
+  
+  <Accordion title="File Management" icon="folder">
+    Manage server files and SFTP access:
+    
+    - **file.create** - Create files and folders
+    - **file.read** - View directory contents
+    - **file.read-content** - View and download file contents
+    - **file.update** - Modify existing files
+    - **file.delete** - Delete files and directories
+    - **file.archive** - Create and extract archives
+    - **file.sftp** - Connect via SFTP (requires file permissions)
+  </Accordion>
+  
+  <Accordion title="Backup Management" icon="cloud-arrow-up">
+    Manage server backups:
+    
+    - **backup.create** - Create new backups
+    - **backup.read** - View all backups
+    - **backup.delete** - Remove backups
+    - **backup.download** - Download backups (gives access to all files)
+    - **backup.restore** - Restore backups (deletes current files)
+    
+    <Warning>
+    **backup.download** and **backup.restore** are dangerous permissions that grant access to all server files.
+    </Warning>
+  </Accordion>
+  
+  <Accordion title="Allocation Management" icon="network-wired">
+    Manage server port allocations:
+    
+    - **allocation.read** - View all allocations
+    - **allocation.create** - Assign additional allocations
+    - **allocation.update** - Change primary allocation and add notes
+    - **allocation.delete** - Remove allocations
+  </Accordion>
+  
+  <Accordion title="Startup Configuration" icon="rocket">
+    Manage startup settings:
+    
+    - **startup.read** - View startup variables
+    - **startup.update** - Modify startup variables
+    - **startup.docker-image** - Change the Docker image
+  </Accordion>
+  
+  <Accordion title="Database Management" icon="database">
+    Manage server databases:
+    
+    - **database.create** - Create new databases
+    - **database.read** - View databases
+    - **database.update** - Rotate database passwords
+    - **database.delete** - Remove databases
+    - **database.view_password** - View database passwords
+  </Accordion>
+  
+  <Accordion title="Schedule Management" icon="clock">
+    Manage server schedules:
+    
+    - **schedule.create** - Create new schedules
+    - **schedule.read** - View schedules and tasks
+    - **schedule.update** - Modify schedules and tasks
+    - **schedule.delete** - Delete schedules
+  </Accordion>
+  
+  <Accordion title="Settings" icon="gear">
+    Manage server settings:
+    
+    - **settings.rename** - Rename the server and change description
+    - **settings.reinstall** - Trigger server reinstall
+  </Accordion>
+  
+  <Accordion title="Activity Logs" icon="list">
+    Access server activity:
+    
+    - **activity.read** - View the server activity log
+  </Accordion>
+</AccordionGroup>
+
+See `Permission.php:101-209` for the complete permission structure.
+
+## Adding a Subuser
+
+<Steps>
+  <Step title="Navigate to Server Subusers">
+    Go to your server's control panel and select the **Subusers** tab.
+  </Step>
+  
+  <Step title="Click Add Subuser">
+    Click the **Create New Subuser** or **Add Subuser** button.
+  </Step>
+  
+  <Step title="Enter User Email">
+    Enter the email address of the user you want to add.
+    
+    <Note>
+    The user must already have a Pterodactyl account with this email address. If they don't have an account, they'll need to create one first.
+    </Note>
+  </Step>
+  
+  <Step title="Select Permissions">
+    Choose which permissions to grant this subuser. You can:
+    
+    - Select entire permission categories (grants all permissions in that category)
+    - Select individual permissions for fine-grained control
+    - Mix and match as needed
+    
+    <Tip>
+    Start with minimal permissions and add more as needed. It's easier to grant additional permissions than to deal with security issues from over-permissioning.
+    </Tip>
+  </Step>
+  
+  <Step title="Create Subuser">
+    Click **Create Subuser** to add them to the server.
+  </Step>
+</Steps>
+
+### What Happens When You Add a Subuser
+
+1. The system verifies the user exists
+2. Checks that the user isn't the server owner
+3. Ensures the user isn't already a subuser on this server
+4. Creates the subuser relationship with specified permissions
+5. Automatically adds `websocket.connect` permission
+6. Logs the action as `server:subuser.create`
+
+See `SubuserController.php:64-79` for implementation details.
+
+## Permission Validation
+
+When setting subuser permissions, the system validates them:
+
+```php
+protected function getDefaultPermissions(Request $request): array
+{
+    $allowed = Permission::permissions()
+        ->map(function ($value, $prefix) {
+            return array_map(function ($value) use ($prefix) {
+                return "$prefix.$value";
+            }, array_keys($value['keys']));
+        })
+        ->flatten()
+        ->all();
+
+    $cleaned = array_intersect($request->input('permissions') ?? [], $allowed);
+
+    return array_unique(array_merge($cleaned, [Permission::ACTION_WEBSOCKET_CONNECT]));
+}
+```
+
+This ensures:
+- Only valid permissions are assigned
+- Invalid permissions are filtered out
+- `websocket.connect` is always included
+
+## Updating Subuser Permissions
+
+You can modify a subuser's permissions at any time.
+
+<Steps>
+  <Step title="Select the Subuser">
+    In the Subusers tab, find the subuser you want to modify.
+  </Step>
+  
+  <Step title="Click Edit">
+    Click the **Edit** button next to the subuser.
+  </Step>
+  
+  <Step title="Modify Permissions">
+    Adjust the permissions as needed:
+    - Check boxes to grant permissions
+    - Uncheck boxes to revoke permissions
+  </Step>
+  
+  <Step title="Save Changes">
+    Click **Save** to update the permissions.
+  </Step>
+</Steps>
+
+### SFTP Access Revocation
+
+When you update permissions, the system automatically revokes active SFTP sessions if permissions have changed:
+
+```php
+if ($permissions !== $current) {
+    $log->transaction(function () use ($request, $subuser, $server) {
+        $this->repository->update($subuser->id, [
+            'permissions' => $this->getDefaultPermissions($request),
+        ]);
+
+        RevokeSftpAccessJob::dispatch($subuser->user->uuid, $server);
+    });
+}
+```
+
+This ensures subusers immediately lose access to resources they no longer have permissions for.
+
+## Removing a Subuser
+
+When you no longer want a user to have access to your server:
+
+<Steps>
+  <Step title="Locate the Subuser">
+    Find the subuser in your Subusers list.
+  </Step>
+  
+  <Step title="Click Delete">
+    Click the **Delete** or remove button next to the subuser.
+  </Step>
+  
+  <Step title="Confirm Removal">
+    Confirm that you want to remove this subuser.
+  </Step>
+</Steps>
+
+<Warning>
+Removing a subuser:
+- Immediately revokes all access to the server
+- Disconnects any active SFTP sessions
+- Cannot be undone (you'll need to re-add them if needed)
+- Is logged as `server:subuser.delete`
+</Warning>
+
+## Permission Inheritance Rules
+
+### Limitations
+
+1. **Server Owner Restrictions**:
+   - You cannot add the server owner as a subuser
+   - The server owner always has full permissions
+
+2. **Self-Management**:
+   - Subusers cannot modify their own permissions
+   - Subusers cannot delete themselves
+
+3. **Permission Constraints**:
+   - Subusers with `user.create` or `user.update` cannot grant permissions they don't have
+   - You can only assign permissions you have access to
+
+### Automatic Permissions
+
+- **websocket.connect** is automatically granted to all subusers and cannot be removed
+- This ensures subusers can always view the console output
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Principle of Least Privilege">
+    Grant only the minimum permissions necessary for the user's role. Start with minimal access and add permissions as needed.
+    
+    Example roles:
+    - **Viewer**: `websocket.connect`, `activity.read`
+    - **Operator**: Add `control.*` permissions
+    - **Developer**: Add `file.*`, `database.*` permissions
+    - **Admin**: Add `user.*`, `settings.*` permissions
+  </Accordion>
+  
+  <Accordion title="Use Clear Email Addresses">
+    Ensure subusers use professional email addresses that clearly identify them. This makes it easier to track who has access to what.
+  </Accordion>
+  
+  <Accordion title="Regular Audits">
+    Periodically review subuser lists and permissions:
+    - Remove users who no longer need access
+    - Adjust permissions based on changing roles
+    - Verify permissions match current responsibilities
+  </Accordion>
+  
+  <Accordion title="Document Roles">
+    Maintain documentation of what permissions each role should have. This ensures consistency when adding new subusers.
+  </Accordion>
+  
+  <Accordion title="Be Cautious with Dangerous Permissions">
+    Some permissions are particularly sensitive:
+    - **backup.download**: Grants access to all server files
+    - **backup.restore**: Can delete all current files
+    - **settings.reinstall**: Wipes the server
+    - **startup.docker-image**: Can change server behavior
+    
+    Only grant these to trusted users.
+  </Accordion>
+  
+  <Accordion title="Monitor Activity Logs">
+    Regularly review server activity logs to ensure subusers are using their access appropriately.
+  </Accordion>
+</AccordionGroup>
+
+## Activity Logging
+
+All subuser operations are logged with details:
+
+### Subuser Creation
+```json
+{
+  "event": "server:subuser.create",
+  "subject": "user_object",
+  "properties": {
+    "email": "user@example.com",
+    "permissions": ["control.console", "file.read", ...]
+  }
+}
+```
+
+### Subuser Update
+```json
+{
+  "event": "server:subuser.update",
+  "subject": "user_object",
+  "properties": {
+    "email": "user@example.com",
+    "old": ["control.console"],
+    "new": ["control.console", "control.start"],
+    "revoked": true
+  }
+}
+```
+
+### Subuser Deletion
+```json
+{
+  "event": "server:subuser.delete",
+  "subject": "user_object",
+  "properties": {
+    "email": "user@example.com",
+    "revoked": true
+  }
+}
+```
+
+## Common Permission Sets
+
+### Read-Only Access
+```json
+[
+  "websocket.connect",
+  "activity.read",
+  "file.read",
+  "database.read",
+  "allocation.read",
+  "startup.read",
+  "schedule.read",
+  "user.read"
+]
+```
+
+### Server Operator
+```json
+[
+  "websocket.connect",
+  "control.console",
+  "control.start",
+  "control.stop",
+  "control.restart",
+  "activity.read"
+]
+```
+
+### Developer Access
+```json
+[
+  "websocket.connect",
+  "control.*",
+  "file.create",
+  "file.read",
+  "file.read-content",
+  "file.update",
+  "file.delete",
+  "file.archive",
+  "file.sftp",
+  "database.*",
+  "backup.create",
+  "backup.read",
+  "activity.read"
+]
+```
+
+### Full Management (Sub-Admin)
+```json
+[
+  "websocket.connect",
+  "control.*",
+  "user.*",
+  "file.*",
+  "backup.*",
+  "allocation.*",
+  "startup.*",
+  "database.*",
+  "schedule.*",
+  "settings.rename",
+  "activity.read"
+]
+```
+
+<Note>
+Notice that even the "Full Management" example doesn't include `settings.reinstall` - this is intentionally restricted as it's a destructive action.
+</Note>
+
+## Troubleshooting
+
+### "User is already a subuser on this server"
+
+This user has already been added to this server. You cannot add the same user twice. If you need to change their permissions, edit the existing subuser instead.
+
+### "Cannot add the server owner as a subuser"
+
+The server owner automatically has full permissions and cannot be added as a subuser.
+
+### "User not found"
+
+The email address doesn't match any Pterodactyl account. The user needs to create an account first.
+
+### Subuser Can't Access Certain Features
+
+Verify they have the required permissions:
+- **SFTP access**: Requires `file.sftp` plus appropriate `file.*` permissions
+- **Console access**: Requires `websocket.connect` (automatically granted)
+- **Send commands**: Requires `control.console`
+
+### Permissions Not Taking Effect
+
+If permission changes don't seem to apply:
+- Ask the subuser to log out and log back in
+- Check server activity logs to confirm the update was saved
+- Verify the permissions were actually changed (check current vs. old permissions)
+
+## API Endpoint Reference
+
+```http
+GET    /api/client/servers/{server}/users           # List subusers
+GET    /api/client/servers/{server}/users/{user}    # Get subuser details
+POST   /api/client/servers/{server}/users           # Create subuser
+POST   /api/client/servers/{server}/users/{user}    # Update subuser
+DELETE /api/client/servers/{server}/users/{user}    # Delete subuser
+```
+
+For detailed API documentation, see the [Subusers API Reference](/api/client/servers).

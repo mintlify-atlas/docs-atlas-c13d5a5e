@@ -1,0 +1,497 @@
+---
+title: Startup Parameters
+description: Configure server startup command and environment variables
+---
+
+Startup parameters control how your server starts and behaves. Each server has configurable variables based on its Egg configuration, allowing you to customize memory limits, game modes, world settings, and more.
+
+## Understanding Startup Variables
+
+Startup variables are placeholders in the startup command that get replaced with actual values:
+
+```bash Example Startup Command
+java -Xms{{SERVER_MEMORY}}M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}
+```
+
+Variables like `{{SERVER_MEMORY}}` are replaced:
+
+```bash Actual Command
+java -Xms2048M -Xmx2048M -jar server.jar
+```
+
+## Viewing Startup Configuration
+
+Get startup information for your server:
+
+```bash Get Startup Info
+GET /api/client/servers/{server}/startup
+```
+
+```json Response
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "egg_variable",
+      "attributes": {
+        "name": "Server Jar File",
+        "description": "The name of the server jarfile to run.",
+        "env_variable": "SERVER_JARFILE",
+        "default_value": "server.jar",
+        "server_value": "paper.jar",
+        "is_editable": true,
+        "rules": "required|string|max:20"
+      }
+    },
+    {
+      "object": "egg_variable",
+      "attributes": {
+        "name": "Server Version",
+        "description": "The version of Minecraft to download.",
+        "env_variable": "MINECRAFT_VERSION",
+        "default_value": "latest",
+        "server_value": "1.20.4",
+        "is_editable": true,
+        "rules": "required|string|max:20"
+      }
+    }
+  ],
+  "meta": {
+    "startup_command": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}",
+    "docker_images": {
+      "Java 17": "ghcr.io/pterodactyl/yolks:java_17",
+      "Java 11": "ghcr.io/pterodactyl/yolks:java_11"
+    },
+    "raw_startup_command": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}"
+  }
+}
+```
+
+### Variable Properties
+
+- `name` - Human-readable variable name
+- `description` - What the variable does
+- `env_variable` - Environment variable name
+- `default_value` - Default if not customized
+- `server_value` - Current value for this server
+- `is_editable` - Whether users can modify it
+- `rules` - Validation rules
+
+<Note>
+Only variables with `is_editable: true` can be modified by users. Admin-only variables are hidden or read-only.
+</Note>
+
+## Updating Variables
+
+Modify a startup variable:
+
+```bash Update Variable
+PUT /api/client/servers/{server}/startup/variable
+Content-Type: application/json
+
+{
+  "key": "MINECRAFT_VERSION",
+  "value": "1.20.4"
+}
+```
+
+```json Response
+{
+  "object": "egg_variable",
+  "attributes": {
+    "name": "Server Version",
+    "env_variable": "MINECRAFT_VERSION",
+    "server_value": "1.20.4"
+  },
+  "meta": {
+    "startup_command": "java -Xms128M -Xmx2048M -jar server.jar",
+    "raw_startup_command": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}"
+  }
+}
+```
+
+<Steps>
+  <Step title="Navigate to Startup">
+    Go to the Startup tab in your server panel.
+  </Step>
+  
+  <Step title="Modify Variables">
+    Edit the variables you want to change. The interface shows current and default values.
+  </Step>
+  
+  <Step title="Save Changes">
+    Click Save. The new values are validated against the rules.
+  </Step>
+  
+  <Step title="Restart Server">
+    Restart your server for changes to take effect. Variables are only applied at startup.
+  </Step>
+</Steps>
+
+## Common Variables
+
+### Minecraft Variables
+
+<AccordionGroup>
+  <Accordion title="Server Jar File">
+    ```bash
+    SERVER_JARFILE=server.jar
+    ```
+    
+    The jar file to execute. Common values:
+    - `server.jar` - Vanilla Minecraft
+    - `paper.jar` - Paper server
+    - `spigot.jar` - Spigot server
+    - `forge.jar` - Forge modded server
+  </Accordion>
+  
+  <Accordion title="Minecraft Version">
+    ```bash
+    MINECRAFT_VERSION=1.20.4
+    ```
+    
+    Which version to download/run:
+    - `latest` - Latest release
+    - `1.20.4` - Specific version
+    - `1.19.2` - Older version
+  </Accordion>
+  
+  <Accordion title="Build Number">
+    ```bash
+    BUILD_NUMBER=latest
+    ```
+    
+    For Paper/Spigot:
+    - `latest` - Latest build
+    - `450` - Specific build number
+  </Accordion>
+  
+  <Accordion title="Forge Version">
+    ```bash
+    FORGE_VERSION=47.2.0
+    ```
+    
+    Forge version for modded servers.
+  </Accordion>
+</AccordionGroup>
+
+### Source Engine Variables
+
+<AccordionGroup>
+  <Accordion title="Game ID">
+    ```bash
+    SRCDS_APPID=730
+    ```
+    
+    Steam App ID:
+    - `730` - CS:GO
+    - `232330` - CS2
+    - `4020` - Garry's Mod
+    - `232250` - Team Fortress 2
+  </Accordion>
+  
+  <Accordion title="Map">
+    ```bash
+    SRCDS_MAP=de_dust2
+    ```
+    
+    Starting map for the server.
+  </Accordion>
+  
+  <Accordion title="Game Mode">
+    ```bash
+    GAME_MODE=competitive
+    ```
+    
+    Game mode configuration.
+  </Accordion>
+</AccordionGroup>
+
+### Generic Variables
+
+<AccordionGroup>
+  <Accordion title="Server Memory">
+    ```bash
+    SERVER_MEMORY=2048
+    ```
+    
+    Memory allocation in megabytes. Usually auto-set based on server limits.
+  </Accordion>
+  
+  <Accordion title="Server Port">
+    ```bash
+    SERVER_PORT=25565
+    ```
+    
+    Primary allocation port. Auto-set from network allocations.
+  </Accordion>
+  
+  <Accordion title="Server IP">
+    ```bash
+    SERVER_IP=0.0.0.0
+    ```
+    
+    IP address to bind to. Usually `0.0.0.0` for all interfaces.
+  </Accordion>
+</AccordionGroup>
+
+## Variable Validation
+
+Variables have validation rules:
+
+```json
+{
+  "env_variable": "MINECRAFT_VERSION",
+  "rules": "required|string|max:20"
+}
+```
+
+### Common Rules
+
+- `required` - Must have a value
+- `string` - Must be text
+- `integer` - Must be a number
+- `boolean` - Must be true/false
+- `max:20` - Maximum length
+- `in:value1,value2` - Must be one of listed values
+- `regex:/^[a-z]+$/` - Must match pattern
+
+If validation fails:
+
+```json Error Response
+HTTP/1.1 422 Unprocessable Entity
+
+{
+  "errors": [
+    {
+      "code": "ValidationException",
+      "detail": "The value field must be a string.",
+      "meta": {
+        "rule": "string"
+      }
+    }
+  ]
+}
+```
+
+## Docker Images
+
+Servers run in Docker containers with specific images:
+
+```json Available Images
+{
+  "docker_images": {
+    "Java 17": "ghcr.io/pterodactyl/yolks:java_17",
+    "Java 11": "ghcr.io/pterodactyl/yolks:java_11",
+    "Java 8": "ghcr.io/pterodactyl/yolks:java_8"
+  }
+}
+```
+
+Some eggs allow users to select the Docker image. This is useful when different game versions require different Java versions.
+
+### Changing Docker Image
+
+If allowed by the egg configuration:
+
+```bash Update Docker Image
+POST /api/client/servers/{server}/settings/docker-image
+Content-Type: application/json
+
+{
+  "docker_image": "ghcr.io/pterodactyl/yolks:java_17"
+}
+```
+
+```json Success
+HTTP/1.1 204 No Content
+```
+
+<Warning>
+Changing the Docker image requires a server restart. Ensure the new image is compatible with your server software.
+</Warning>
+
+## Read-Only Variables
+
+Some variables cannot be modified by users:
+
+```json Read-Only Variable
+{
+  "name": "Server Memory",
+  "env_variable": "SERVER_MEMORY",
+  "server_value": "2048",
+  "is_editable": false
+}
+```
+
+These are typically:
+- Resource limits (memory, CPU)
+- Network configuration (IP, port)
+- Security settings
+- License keys
+
+Only administrators can modify read-only variables.
+
+## Environment Variables
+
+All variables are passed as environment variables to the container:
+
+```bash Inside Container
+echo $SERVER_MEMORY
+2048
+
+echo $MINECRAFT_VERSION  
+1.20.4
+
+echo $SERVER_JARFILE
+paper.jar
+```
+
+Startup scripts can access these in any language:
+
+```bash Bash
+#!/bin/bash
+java -Xmx${SERVER_MEMORY}M -jar ${SERVER_JARFILE}
+```
+
+```python Python
+import os
+memory = os.environ.get('SERVER_MEMORY')
+jarfile = os.environ.get('SERVER_JARFILE')
+```
+
+## Startup Command Preview
+
+The panel shows the final startup command with variables replaced:
+
+```bash Raw Command
+java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}
+```
+
+```bash Processed Command
+java -Xms128M -Xmx2048M -jar paper.jar
+```
+
+This helps verify your variables are set correctly.
+
+## Activity Logging
+
+Variable changes are logged:
+
+```json Example Log
+{
+  "event": "server:startup.edit",
+  "properties": {
+    "variable": "MINECRAFT_VERSION",
+    "old": "1.20.1",
+    "new": "1.20.4"
+  }
+}
+```
+
+## Common Configurations
+
+<AccordionGroup>
+  <Accordion title="Minecraft Paper Server">
+    ```bash
+    SERVER_JARFILE=paper.jar
+    MINECRAFT_VERSION=1.20.4
+    BUILD_NUMBER=latest
+    ```
+    
+    Paper automatically downloads the specified version on first start.
+  </Accordion>
+  
+  <Accordion title="Minecraft Forge Modded">
+    ```bash
+    SERVER_JARFILE=forge.jar
+    MINECRAFT_VERSION=1.20.1
+    FORGE_VERSION=47.2.0
+    ```
+    
+    Forge version must match Minecraft version.
+  </Accordion>
+  
+  <Accordion title="CS:GO Server">
+    ```bash
+    SRCDS_APPID=730
+    SRCDS_MAP=de_dust2
+    SRCDS_GAMETYPE=0
+    SRCDS_GAMEMODE=1
+    SRCDS_MAXPLAYERS=32
+    ```
+  </Accordion>
+  
+  <Accordion title="ARK: Survival Evolved">
+    ```bash
+    SERVER_MAP=TheIsland
+    SESSION_NAME=My ARK Server
+    MAX_PLAYERS=70
+    SERVER_PASSWORD=
+    ADMIN_PASSWORD=SecureAdminPass123
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Test After Changes">
+    Always test your server after changing variables. Check logs for errors related to invalid configurations.
+  </Accordion>
+  
+  <Accordion title="Use Latest Versions">
+    For production servers, use specific version numbers instead of "latest" to prevent unexpected updates:
+    
+    ```bash
+    MINECRAFT_VERSION=1.20.4  # Good
+    MINECRAFT_VERSION=latest  # May break unexpectedly
+    ```
+  </Accordion>
+  
+  <Accordion title="Document Custom Variables">
+    If you modify variables from defaults, document why:
+    - Take screenshots of working configurations
+    - Note dependencies between variables
+    - Keep a changelog of what you changed
+  </Accordion>
+  
+  <Accordion title="Verify Compatibility">
+    When changing versions, verify compatibility:
+    - Plugin versions match server version
+    - World format is compatible
+    - Forge/mod versions align
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Server Won't Start After Variable Change">
+    - Check server logs for error messages
+    - Verify variable value is valid (check rules)
+    - Revert to previous working value
+    - Ensure Docker image supports the configuration
+  </Accordion>
+  
+  <Accordion title="Cannot Edit Variable">
+    - Check if `is_editable` is false
+    - Verify you have `startup.update` permission
+    - Some variables are admin-only
+    - Contact server owner/admin
+  </Accordion>
+  
+  <Accordion title="Validation Error">
+    - Read the validation rule carefully
+    - Check for typos in your value
+    - Ensure correct data type (string vs integer)
+    - Stay within length limits
+  </Accordion>
+  
+  <Accordion title="Variables Not Taking Effect">
+    - Restart the server after changing variables
+    - Variables only apply at startup, not runtime
+    - Check if game-specific config file overrides them
+    - Verify variable name matches exactly
+  </Accordion>
+</AccordionGroup>

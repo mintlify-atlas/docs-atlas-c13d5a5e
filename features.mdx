@@ -1,0 +1,404 @@
+---
+title: 'Features'
+description: 'Comprehensive overview of Pterodactyl Panel features and capabilities'
+---
+
+# Features
+
+Pterodactyl Panel is packed with powerful features designed to make game server management simple, secure, and scalable. Whether you're running a single server or managing thousands, Pterodactyl has the tools you need.
+
+## Core Features
+
+### Server Management
+
+<CardGroup cols={2}>
+  <Card title="Multi-Server Support" icon="server">
+    Manage unlimited servers from a single Panel interface
+  </Card>
+  <Card title="Real-Time Console" icon="terminal">
+    Interactive console with command history and live log streaming
+  </Card>
+  <Card title="File Manager" icon="folder">
+    Browser-based file editor with syntax highlighting
+  </Card>
+  <Card title="Resource Monitoring" icon="chart-line">
+    Live CPU, memory, disk, and network statistics
+  </Card>
+</CardGroup>
+
+#### Container-Based Isolation
+- Each server runs in its own Docker container
+- Complete resource isolation between servers
+- Prevents cross-server interference and security breaches
+- Easy cleanup and server removal
+
+#### Power Management
+- Start, stop, restart, and kill servers
+- Schedule automated restarts
+- Graceful shutdown with configurable timeouts
+- Emergency kill switch for unresponsive servers
+
+#### Resource Controls
+- CPU limit enforcement
+- Memory allocation and limits
+- Disk space quotas
+- Network bandwidth throttling
+- Database allocation limits
+
+### User Management
+
+<Note>
+Pterodactyl supports multiple user types with different permission levels, making it perfect for both personal use and commercial hosting.
+</Note>
+
+#### Account System
+- **Administrators**: Full system access and configuration
+- **Server Owners**: Users who own and control their servers
+- **Subusers**: Limited access to specific servers with granular permissions
+
+#### Permission System
+- Over 40+ granular permissions
+- Control access to console, files, databases, backups, and more
+- Per-server permission assignments
+- Bulk permission management
+
+#### Authentication
+- Secure password hashing (bcrypt)
+- Two-Factor Authentication (2FA) support
+- Session management with Redis
+- API key authentication for developers
+- TOTP-based 2FA using Google Authenticator or similar apps
+
+### File Management
+
+#### Web-Based Editor
+- Syntax highlighting for multiple languages
+- In-browser file editing
+- Create, rename, delete, and move files
+- Archive support (zip, tar.gz)
+- Bulk file operations
+
+#### SFTP Access
+- Full SFTP server built into Wings
+- Per-server SFTP credentials
+- Supports all standard SFTP clients (FileZilla, WinSCP, etc.)
+- Chrooted to server directory for security
+- Uses Panel authentication
+
+#### File Permissions
+- Read/write controls per subuser
+- Download/upload restrictions
+- File size limits
+- Extension filtering
+
+### Database Management
+
+<Warning>
+Database features require a MySQL/MariaDB server. Multiple database hosts can be configured for load distribution.
+</Warning>
+
+- Create and manage MySQL databases
+- Multiple database host support
+- Per-server database allocation limits
+- Remote access configuration
+- Password rotation
+- Database user management
+
+### Backup System
+
+#### Backup Features
+- Scheduled automatic backups
+- Manual on-demand backups
+- Compressed backup archives
+- Backup retention policies
+- Download backups to local machine
+- Restore servers from backups
+
+#### Storage Options
+- Local filesystem storage
+- AWS S3 compatible storage
+- Custom S3-compatible endpoints
+- Backup size limits
+- Backup count limits per server
+
+### Network Management
+
+#### Allocation System
+- Port and IP allocation management
+- Multiple allocations per server
+- Primary and additional allocations
+- Automatic port assignment
+- IPv4 and IPv6 support
+
+#### Security
+- Firewall-friendly allocation system
+- Port range management
+- DDoS protection support (when configured)
+- Rate limiting on API endpoints
+
+## Advanced Features
+
+### RESTful API
+
+<Card title="Full API Documentation" icon="code" href="https://pterodactyl.io/api/">
+  Comprehensive API for automation and integration
+</Card>
+
+#### Client API
+- Manage your own servers programmatically
+- Access server console and logs
+- File operations via API
+- Server power controls
+- Database management
+- Backup creation and restoration
+
+#### Application API
+- Administrative operations
+- User creation and management
+- Server provisioning
+- Node management
+- Nest and egg configuration
+- System-wide operations
+
+#### API Features
+- RESTful architecture
+- JSON request/response format
+- API key authentication
+- Rate limiting
+- Comprehensive error messages
+- Pagination support
+- Filtering and sorting
+
+### Multi-Node Support
+
+<Tip>
+Distribute servers across multiple physical machines or data centers for scalability and redundancy.
+</Tip>
+
+- Single Panel controls multiple Wings nodes
+- Geographically distributed nodes
+- Load balancing across nodes
+- Per-node resource tracking
+- Automatic node selection
+- Node maintenance mode
+
+### Server Eggs & Nests
+
+#### Nest System
+- Organize games by category (Minecraft, Source Engine, etc.)
+- Support for any game or application
+- Custom nest creation
+- Import/export nests
+
+#### Egg System
+- Pre-configured server templates
+- Custom startup parameters
+- Environment variable configuration
+- Docker image specification
+- Installation script system
+- Update scripts
+- File parsing and configuration
+
+#### Egg Features
+- Import eggs from JSON
+- Export eggs for sharing
+- Community egg repository
+- Custom Docker images
+- Multi-stage installations
+- Version management
+
+### Scheduling System
+
+<Steps>
+  <Step title="Create Schedule">
+    Define when tasks should run (cron-like syntax)
+  </Step>
+  <Step title="Add Tasks">
+    Configure actions like backups, restarts, or commands
+  </Step>
+  <Step title="Automation">
+    Tasks run automatically based on schedule
+  </Step>
+</Steps>
+
+#### Scheduled Tasks
+- Server power actions (start, stop, restart)
+- Send console commands
+- Create backups
+- Chain multiple tasks together
+- Task execution delays
+- Conditional task execution
+
+#### Schedule Options
+- Cron expression support
+- Minute, hour, day, month scheduling
+- Day of week selection
+- Multiple schedules per server
+- Active/inactive toggles
+
+### Server Variables
+
+- Environment variable management
+- Per-server configuration
+- Validation and rules
+- User-editable variables
+- Admin-only variables
+- Default values and descriptions
+
+### Activity Logging
+
+<Note>
+All administrative and user actions are logged for audit purposes.
+</Note>
+
+- Comprehensive activity logs
+- User action tracking
+- Server event logging
+- IP address logging
+- Searchable log interface
+- Export logs for compliance
+
+## Administrative Features
+
+### Panel Administration
+
+#### Dashboard
+- System overview statistics
+- Recent server activity
+- User registration stats
+- Resource usage graphs
+- Quick access to common tasks
+
+#### User Management
+- Create, edit, and delete users
+- Password reset functionality
+- Email verification
+- Account suspension
+- Bulk user operations
+- User impersonation for support
+
+#### Server Management
+- Create servers with custom configurations
+- Modify server resources
+- Transfer servers between users
+- Suspend/unsuspend servers
+- Server deletion and cleanup
+- Bulk server operations
+
+#### Node Management
+- Add and configure Wings nodes
+- Resource allocation tracking
+- Node status monitoring
+- Allocation management
+- Maintenance mode
+- Node deletion with server migration
+
+### Configuration Options
+
+#### Email Configuration
+- SMTP support
+- Mailgun integration
+- Postmark integration
+- AWS SES support
+- Email templates
+- Custom mail from address
+
+#### Localization
+- Multiple language support via i18next
+- Community translations
+- Date and time formatting
+- Timezone configuration
+- Currency formatting (for integrations)
+
+#### Themes
+- Default Pterodactyl theme
+- Custom theme support
+- CSS/JavaScript modifications
+- Logo customization
+- Color scheme changes
+
+#### Security Settings
+- Require 2FA for administrators
+- Session timeout configuration
+- Password requirements
+- reCAPTCHA support
+- API rate limiting
+- IP allowlisting/blocklisting
+
+## Integration Features
+
+### OAuth & SSO
+- OAuth2 provider support (planned)
+- Discord integration
+- LDAP authentication support (via plugins)
+- Custom authentication adapters
+
+### Webhooks
+- Server event webhooks
+- User action webhooks
+- Custom webhook endpoints
+- JSON payload delivery
+
+### Third-Party Integrations
+- Billing system integration (WHMCS, Blesta, etc.)
+- Monitoring tools (Grafana, Prometheus)
+- Discord bots
+- Analytics platforms
+- Backup solutions
+
+## Performance Features
+
+### Caching
+- Redis caching layer
+- Query result caching
+- Session storage in Redis
+- API response caching
+- Static asset optimization
+
+### Queue System
+- Background job processing
+- Email queuing
+- Server installation queuing
+- Backup creation queuing
+- Failed job retry logic
+
+### Optimization
+- Lazy loading of resources
+- Database query optimization
+- Asset minification and hashing
+- CDN support
+- HTTP/2 support
+
+## Developer Features
+
+### Modern Tech Stack
+- **Laravel 11**: Latest PHP framework features
+- **React + TypeScript**: Type-safe frontend development
+- **TailwindCSS**: Utility-first CSS framework
+- **Webpack**: Modern asset bundling
+
+### Development Tools
+- Hot module replacement for frontend
+- Local development environment support
+- Comprehensive test suite
+- Code formatting (PHP CS Fixer, ESLint)
+- Static analysis (PHPStan, TypeScript)
+- Docker-based development environment
+
+### Extensibility
+- Event system for custom logic
+- Service provider architecture
+- Custom middleware support
+- Database migrations for upgrades
+- Plugin system (community)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="System Requirements" icon="server" href="/system-requirements">
+    Check if your server meets the requirements to run Pterodactyl
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Get started with installing Pterodactyl Panel
+  </Card>
+</CardGroup>

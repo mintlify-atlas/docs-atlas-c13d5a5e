@@ -1,0 +1,279 @@
+---
+title: 'API Keys'
+description: 'Create and manage API keys for programmatic access'
+icon: 'key'
+---
+
+## Overview
+
+API keys allow you to interact with the Pterodactyl Panel programmatically. You can use these keys to automate tasks, integrate with third-party services, or build custom applications.
+
+<Warning>
+**Security First:**
+- API keys provide full access to your account
+- Treat them like passwords - never share or expose them
+- Use IP restrictions when possible to limit access
+- Regularly rotate keys that are no longer needed
+</Warning>
+
+## Account Limits
+
+You can create up to **25 API keys** per account. If you reach this limit, you'll need to delete unused keys before creating new ones.
+
+```php
+if ($request->user()->apiKeys->count() >= 25) {
+    throw new DisplayException('You have reached the account limit for number of API keys.');
+}
+```
+
+See `ApiKeyController.php:32-34` for implementation details.
+
+## Creating an API Key
+
+<Steps>
+  <Step title="Navigate to API Settings">
+    Go to **Account Settings** and select the **API Keys** section.
+  </Step>
+  
+  <Step title="Click Create New Key">
+    Click the **Create API Key** button to start the creation process.
+  </Step>
+  
+  <Step title="Add Description">
+    Enter a clear description for your API key. This helps you identify its purpose later.
+    
+    <Tip>
+    Use descriptive names like "Production Deployment Script" or "Backup Automation" instead of generic names like "API Key 1".
+    </Tip>
+  </Step>
+  
+  <Step title="Configure IP Restrictions (Optional)">
+    For enhanced security, you can restrict the API key to specific IP addresses or CIDR ranges.
+    
+    - Leave empty to allow access from any IP
+    - Add individual IPs: `192.168.1.100`
+    - Use CIDR notation for ranges: `192.168.1.0/24`
+    - Add multiple IPs/ranges (up to 50)
+    
+    <Note>
+    IP validation is performed using the IPTools library to ensure valid IP addresses and CIDR ranges (see `StoreApiKeyRequest.php:26-45`).
+    </Note>
+  </Step>
+  
+  <Step title="Create the Key">
+    Click **Create** to generate your API key.
+  </Step>
+  
+  <Step title="Copy Your Secret Token">
+    **CRITICAL**: Your secret token will be displayed **only once**. Copy it immediately and store it securely.
+    
+    <Warning>
+    You cannot retrieve the secret token after closing this dialog. If you lose it, you'll need to create a new API key.
+    </Warning>
+  </Step>
+</Steps>
+
+## API Key Response
+
+When you create an API key, you'll receive a response containing:
+
+```json
+{
+  "object": "api_key",
+  "attributes": {
+    "identifier": "unique-identifier",
+    "description": "Your key description",
+    "allowed_ips": ["192.168.1.0/24"],
+    "created_at": "2024-01-01T00:00:00+00:00"
+  },
+  "meta": {
+    "secret_token": "ptlc_YourActualSecretTokenHere"
+  }
+}
+```
+
+The `secret_token` in the `meta` section is your actual API key - this is what you'll use for authentication.
+
+## Using Your API Key
+
+Include your API key in the Authorization header for all API requests:
+
+```bash
+curl -X GET "https://panel.example.com/api/client/account" \
+  -H "Authorization: Bearer ptlc_YourSecretTokenHere" \
+  -H "Accept: Application/vnd.pterodactyl.v1+json"
+```
+
+### Example: List Servers
+
+```javascript
+fetch('https://panel.example.com/api/client', {
+  headers: {
+    'Authorization': 'Bearer ptlc_YourSecretTokenHere',
+    'Accept': 'Application/vnd.pterodactyl.v1+json'
+  }
+})
+.then(response => response.json())
+.then(data => console.log(data));
+```
+
+### Example: Get Server Details
+
+```python
+import requests
+
+headers = {
+    'Authorization': 'Bearer ptlc_YourSecretTokenHere',
+    'Accept': 'Application/vnd.pterodactyl.v1+json'
+}
+
+response = requests.get(
+    'https://panel.example.com/api/client/servers/abc123',
+    headers=headers
+)
+
+print(response.json())
+```
+
+## Managing API Keys
+
+### View Your API Keys
+
+You can view all your API keys in the API Keys section of your account settings. For each key, you'll see:
+
+- **Description**: The name you gave the key
+- **Identifier**: A unique identifier for the key
+- **Allowed IPs**: Any IP restrictions configured
+- **Created**: When the key was created
+
+<Note>
+The secret token is **never** displayed after initial creation for security reasons.
+</Note>
+
+### Delete an API Key
+
+When you no longer need an API key, it's important to delete it:
+
+<Steps>
+  <Step title="Locate the Key">
+    Find the API key you want to delete in your API Keys list.
+  </Step>
+  
+  <Step title="Click Delete">
+    Click the delete icon or **Delete** button next to the key.
+  </Step>
+  
+  <Step title="Confirm Deletion">
+    Confirm that you want to delete the key. This action cannot be undone.
+  </Step>
+</Steps>
+
+<Warning>
+**Important**: Deleting an API key immediately invalidates it. Any applications or scripts using this key will stop working instantly.
+</Warning>
+
+## IP Address Restrictions
+
+IP restrictions add an extra layer of security by limiting where your API key can be used from.
+
+### Supported Formats
+
+```bash
+# Single IP address
+192.168.1.100
+
+# CIDR notation for IP ranges
+192.168.1.0/24
+10.0.0.0/8
+
+# IPv6 addresses
+2001:0db8:85a3::8a2e:0370:7334
+2001:0db8:85a3::/64
+
+# Multiple IPs/ranges (up to 50)
+[
+  "192.168.1.100",
+  "10.0.0.0/8",
+  "2001:0db8:85a3::/64"
+]
+```
+
+### Validation
+
+The system validates each IP address or CIDR range to ensure it's properly formatted:
+
+```php
+foreach ($ips as $index => $ip) {
+    $valid = false;
+    try {
+        $valid = Range::parse($ip)->valid();
+    } catch (\Exception $exception) {
+        if ($exception->getMessage() !== 'Invalid IP address format') {
+            throw $exception;
+        }
+    } finally {
+        $validator->errors()->addIf(
+            !$valid,
+            "allowed_ips.{$index}",
+            '"' . $ip . '" is not a valid IP address or CIDR range.'
+        );
+    }
+}
+```
+
+<Tip>
+If you're unsure about IP restrictions, start without them and add them later once you know the IP addresses your application will use.
+</Tip>
+
+## Activity Logging
+
+All API key operations are logged for security auditing:
+
+- **Key Creation**: `user:api-key.create` (includes identifier)
+- **Key Deletion**: `user:api-key.delete` (includes identifier)
+
+You can review these logs in your activity feed to monitor API key usage.
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Descriptive Names">
+    Always use clear, descriptive names for your API keys. This makes it easier to identify and manage them later.
+    
+    Good: "Production Deploy Bot", "Daily Backup Script"
+    Bad: "Key1", "Test", "Temporary"
+  </Accordion>
+  
+  <Accordion title="Implement IP Restrictions">
+    Whenever possible, restrict API keys to specific IP addresses or ranges. This prevents unauthorized use even if a key is compromised.
+  </Accordion>
+  
+  <Accordion title="Rotate Keys Regularly">
+    Create new API keys periodically and delete old ones. This limits the window of opportunity if a key is compromised.
+  </Accordion>
+  
+  <Accordion title="Store Keys Securely">
+    - Use environment variables, not hardcoded values
+    - Use secret management services (AWS Secrets Manager, HashiCorp Vault, etc.)
+    - Never commit keys to version control
+    - Never share keys via insecure channels
+  </Accordion>
+  
+  <Accordion title="Monitor Usage">
+    Regularly review your activity logs to detect any unusual API key usage patterns.
+  </Accordion>
+  
+  <Accordion title="Delete Unused Keys">
+    Remove API keys that are no longer needed. Each active key is a potential security risk.
+  </Accordion>
+</AccordionGroup>
+
+## API Endpoint Reference
+
+```http
+GET    /api/client/account/api-keys              # List all API keys
+POST   /api/client/account/api-keys              # Create new API key
+DELETE /api/client/account/api-keys/{identifier} # Delete API key
+```
+
+For detailed API documentation, see the [API Keys Reference](/api/client/account).

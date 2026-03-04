@@ -1,0 +1,442 @@
+---
+title: File Management
+description: Browse, read, write, and manage server files
+---
+
+The file management endpoints allow you to interact with the server's filesystem, including listing directories, reading/writing files, and performing file operations.
+
+## List Directory Contents
+
+List files and folders in a directory.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}/files/list?directory=/" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+<ParamField path="server" type="string" required>
+  The server identifier
+</ParamField>
+
+<ParamField query="directory" type="string">
+  Directory path to list (default: `/`)
+</ParamField>
+
+### Response
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "file_object",
+      "attributes": {
+        "name": "server.jar",
+        "mode": "0644",
+        "mode_bits": "-rw-r--r--",
+        "size": 41943040,
+        "is_file": true,
+        "is_symlink": false,
+        "mimetype": "application/java-archive",
+        "created_at": "2024-01-15T10:30:00+00:00",
+        "modified_at": "2024-01-15T10:30:00+00:00"
+      }
+    },
+    {
+      "object": "file_object",
+      "attributes": {
+        "name": "logs",
+        "mode": "0755",
+        "mode_bits": "drwxr-xr-x",
+        "size": 4096,
+        "is_file": false,
+        "is_symlink": false,
+        "mimetype": "inode/directory",
+        "created_at": "2024-01-15T10:25:00+00:00",
+        "modified_at": "2024-01-15T12:45:00+00:00"
+      }
+    }
+  ]
+}
+```
+
+<ResponseField name="name" type="string">
+  File or directory name
+</ResponseField>
+
+<ResponseField name="mode" type="string">
+  Octal file permissions
+</ResponseField>
+
+<ResponseField name="mode_bits" type="string">
+  Human-readable file permissions
+</ResponseField>
+
+<ResponseField name="size" type="integer">
+  File size in bytes
+</ResponseField>
+
+<ResponseField name="is_file" type="boolean">
+  Whether this is a file (false for directories)
+</ResponseField>
+
+<ResponseField name="mimetype" type="string">
+  MIME type of the file
+</ResponseField>
+
+## Read File Contents
+
+Get the contents of a file.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}/files/contents?file=/server.properties" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+<ParamField query="file" type="string" required>
+  Path to the file to read
+</ParamField>
+
+### Response
+
+Returns the raw file contents as `text/plain`. Maximum file size is configurable (default 5MB).
+
+## Write File Contents
+
+Write or update file contents.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/files/write?file=/server.properties" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: text/plain" \
+  --data-binary @server.properties
+```
+
+<ParamField query="file" type="string" required>
+  Path to the file to write
+</ParamField>
+
+<ParamField body="content" type="string" required>
+  The file contents (sent as request body)
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+## Download File
+
+Generate a one-time download URL for a file.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}/files/download?file=/backups/world.zip" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+<ParamField query="file" type="string" required>
+  Path to the file to download
+</ParamField>
+
+### Response
+
+```json
+{
+  "object": "signed_url",
+  "attributes": {
+    "url": "https://node01.example.com/download/file?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
+}
+```
+
+<ResponseField name="url" type="string">
+  Signed URL for downloading the file (valid for 15 minutes)
+</ResponseField>
+
+## Upload File
+
+Get a one-time upload URL.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}/files/upload" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+### Response
+
+```json
+{
+  "object": "signed_url",
+  "attributes": {
+    "url": "https://node01.example.com/upload/file?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
+}
+```
+
+Use the returned URL to upload files via POST multipart/form-data.
+
+## Create Directory
+
+Create a new directory.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/files/create-folder" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "plugins",
+    "root": "/"
+  }'
+```
+
+<ParamField body="name" type="string" required>
+  Name of the directory to create
+</ParamField>
+
+<ParamField body="root" type="string" required>
+  Parent directory path
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+## Rename Files
+
+Rename or move files and directories.
+
+```bash
+curl -X PUT "https://panel.example.com/api/client/servers/{server}/files/rename" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "root": "/",
+    "files": [
+      {
+        "from": "old_name.txt",
+        "to": "new_name.txt"
+      },
+      {
+        "from": "folder1/file.txt",
+        "to": "folder2/file.txt"
+      }
+    ]
+  }'
+```
+
+<ParamField body="root" type="string" required>
+  Base directory for the operations
+</ParamField>
+
+<ParamField body="files" type="array" required>
+  Array of rename operations with `from` and `to` paths
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+## Copy File
+
+Copy a file to a new location.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/files/copy" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "location": "/path/to/file.txt"
+  }'
+```
+
+<ParamField body="location" type="string" required>
+  Path to the file to copy
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success. Creates a copy with " copy" appended to the filename.
+
+## Delete Files
+
+Delete one or more files or directories.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/files/delete" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "root": "/",
+    "files": [
+      "old_file.txt",
+      "unused_folder"
+    ]
+  }'
+```
+
+<ParamField body="root" type="string" required>
+  Base directory for the operations
+</ParamField>
+
+<ParamField body="files" type="array" required>
+  Array of file/directory names to delete
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+## Compress Files
+
+Create a compressed archive from files and directories.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/files/compress" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "root": "/",
+    "files": [
+      "world",
+      "plugins",
+      "server.properties"
+    ]
+  }'
+```
+
+<ParamField body="root" type="string" required>
+  Base directory for the operations
+</ParamField>
+
+<ParamField body="files" type="array" required>
+  Array of files/directories to include in the archive
+</ParamField>
+
+### Response
+
+```json
+{
+  "object": "file_object",
+  "attributes": {
+    "name": "archive-2024-01-15-123456.tar.gz",
+    "mode": "0644",
+    "mode_bits": "-rw-r--r--",
+    "size": 104857600,
+    "is_file": true,
+    "is_symlink": false,
+    "mimetype": "application/gzip",
+    "created_at": "2024-01-15T12:34:56+00:00",
+    "modified_at": "2024-01-15T12:34:56+00:00"
+  }
+}
+```
+
+## Decompress Archive
+
+Extract a compressed archive.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/files/decompress" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "root": "/",
+    "file": "backup.tar.gz"
+  }'
+```
+
+<ParamField body="root" type="string" required>
+  Directory containing the archive
+</ParamField>
+
+<ParamField body="file" type="string" required>
+  Archive filename to extract
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+## Change Permissions
+
+Update file or directory permissions.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/files/chmod" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "root": "/",
+    "files": [
+      {
+        "file": "start.sh",
+        "mode": "0755"
+      }
+    ]
+  }'
+```
+
+<ParamField body="root" type="string" required>
+  Base directory for the operations
+</ParamField>
+
+<ParamField body="files" type="array" required>
+  Array of objects with `file` (path) and `mode` (octal permissions)
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+## Pull Remote File
+
+Download a file from a remote URL to the server.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/files/pull" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/plugin.jar",
+    "directory": "/plugins",
+    "filename": "CustomPlugin.jar",
+    "use_header": false,
+    "foreground": false
+  }'
+```
+
+<ParamField body="url" type="string" required>
+  URL of the file to download
+</ParamField>
+
+<ParamField body="directory" type="string" required>
+  Target directory on the server
+</ParamField>
+
+<ParamField body="filename" type="string">
+  Custom filename (optional, uses URL filename if not provided)
+</ParamField>
+
+<ParamField body="use_header" type="boolean">
+  Use Content-Disposition header for filename (default: false)
+</ParamField>
+
+<ParamField body="foreground" type="boolean">
+  Download in foreground (default: false for background)
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success. The download happens asynchronously in the background.

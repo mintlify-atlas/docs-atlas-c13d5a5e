@@ -1,0 +1,574 @@
+---
+title: 'Networking'
+description: 'Network configuration and port allocation in Wings'
+---
+
+## Overview
+
+Wings manages network configuration for all game servers running on a node, handling port allocation, IP binding, and network isolation through Docker.
+
+## Network Architecture
+
+```
+┌──────────────────────────────────────┐
+│         Internet Traffic             │
+└────────────────┬─────────────────────┘
+                 │
+                 ▼
+┌──────────────────────────────────────┐
+│      Firewall / Load Balancer        │
+└────────────────┬─────────────────────┘
+                 │
+                 ▼
+┌──────────────────────────────────────┐
+│         Host Machine (Node)          │
+│  ┌────────────────────────────┐      │
+│  │        Wings Daemon        │      │
+│  │    :8080 (HTTPS API)       │      │
+│  │    :2022 (SFTP)            │      │
+│  └────────────────────────────┘      │
+│                                       │
+│  ┌────────────────────────────┐      │
+│  │     Docker Bridge          │      │
+│  │                            │      │
+│  │  ┌──────┐  ┌──────┐       │      │
+│  │  │Server│  │Server│       │      │
+│  │  │:25565│  │:25566│       │      │
+│  │  └──────┘  └──────┘       │      │
+│  └────────────────────────────┘      │
+└──────────────────────────────────────┘
+```
+
+## Port Allocation
+
+Wings assigns network ports to servers based on allocations configured in the Panel.
+
+### How Allocations Work
+
+1. **Panel Configuration**: Create allocations in Panel → Nodes → Allocations
+2. **Server Assignment**: Assign allocations when creating a server
+3. **Wings Implementation**: Wings maps container ports to host ports
+
+### Primary Allocation
+
+Every server has one primary allocation:
+
+```json
+{
+  "allocations": {
+    "default": {
+      "ip": "0.0.0.0",
+      "port": 25565
+    }
+  }
+}
+```
+
+This creates environment variables available in startup commands:
+
+```bash
+SERVER_IP=0.0.0.0
+SERVER_PORT=25565
+```
+
+### Additional Allocations
+
+Servers can have multiple allocations for additional services:
+
+```json
+{
+  "allocations": {
+    "default": {
+      "ip": "0.0.0.0",
+      "port": 25565
+    },
+    "mappings": {
+      "25565": 25565,  // Main game port
+      "25575": 25575,  // RCON port
+      "8123": 8123     // Web map port
+    }
+  }
+}
+```
+
+From `ServerConfigurationStructureService` (app/Services/Servers/ServerConfigurationStructureService.php:72):
+
+```php
+'allocations' => [
+    'force_outgoing_ip' => $server->egg->force_outgoing_ip,
+    'default' => [
+        'ip' => $server->allocation->ip,
+        'port' => $server->allocation->port,
+    ],
+    'mappings' => $server->getAllocationMappings(),
+],
+```
+
+## IP Binding
+
+### Default Binding (0.0.0.0)
+
+Most servers bind to all interfaces:
+
+```yaml
+ip: 0.0.0.0
+port: 25565
+```
+
+This allows connections from any IP address on the host.
+
+### Specific IP Binding
+
+Bind to a specific IP address:
+
+```yaml
+ip: 192.168.1.100
+port: 25565
+```
+
+Useful for multi-IP setups or DDoS protection services.
+
+### Multiple IPs per Node
+
+Configure multiple IPs in Panel → Nodes → Allocations:
+
+```
+192.168.1.100:25565-25665
+192.168.1.101:25565-25665
+10.0.0.50:25565-25665
+```
+
+This allows distributing servers across different IPs.
+
+## Docker Network Configuration
+
+### Bridge Network
+
+Wings uses Docker's default bridge network:
+
+```bash
+# View Docker networks
+docker network ls
+
+# Inspect bridge network
+docker network inspect bridge
+```
+
+Containers get:
+- Internal IP (e.g., 172.17.0.x)
+- Port mappings to host
+- NAT for outbound connections
+
+### Port Mapping
+
+Wings creates Docker port mappings:
+
+```bash
+# Example port mapping
+docker run -p 0.0.0.0:25565:25565/tcp \
+           -p 0.0.0.0:25565:25565/udp \
+           ...
+```
+
+This maps container port 25565 to host port 25565 for both TCP and UDP.
+
+### Force Outgoing IP
+
+Some eggs force outgoing traffic to use the allocation IP:
+
+```json
+{
+  "allocations": {
+    "force_outgoing_ip": true
+  }
+}
+```
+
+This ensures the server's outbound connections use the correct IP (important for licensing servers).
+
+## Firewall Configuration
+
+### Required Ports
+
+| Service | Port | Protocol | Description |
+| --- | --- | --- | --- |
+| Wings API | 8080 | TCP | Panel communication |
+| SFTP | 2022 | TCP | File transfers |
+| Game Servers | 25565-25665 | TCP/UDP | Server allocations |
+
+### UFW (Ubuntu/Debian)
+
+```bash
+# Allow Wings services
+ufw allow 8080/tcp comment 'Wings API'
+ufw allow 2022/tcp comment 'Wings SFTP'
+
+# Allow game server ports
+ufw allow 25565:25665/tcp comment 'Game servers TCP'
+ufw allow 25565:25665/udp comment 'Game servers UDP'
+
+# Enable firewall
+ufw enable
+
+# Check status
+ufw status numbered
+```
+
+### FirewallD (CentOS/RHEL)
+
+```bash
+# Add Wings ports
+firewall-cmd --permanent --add-port=8080/tcp
+firewall-cmd --permanent --add-port=2022/tcp
+
+# Add game server range
+firewall-cmd --permanent --add-port=25565-25665/tcp
+firewall-cmd --permanent --add-port=25565-25665/udp
+
+# Reload firewall
+firewall-cmd --reload
+
+# List rules
+firewall-cmd --list-all
+```
+
+### iptables
+
+```bash
+# Allow Wings API
+iptables -A INPUT -p tcp --dport 8080 -j ACCEPT
+
+# Allow SFTP
+iptables -A INPUT -p tcp --dport 2022 -j ACCEPT
+
+# Allow game servers
+iptables -A INPUT -p tcp --dport 25565:25665 -j ACCEPT
+iptables -A INPUT -p udp --dport 25565:25665 -j ACCEPT
+
+# Save rules
+iptables-save > /etc/iptables/rules.v4
+```
+
+## SFTP Configuration
+
+Wings runs an integrated SFTP server for file management.
+
+### SFTP Settings
+
+Configure in `/etc/pterodactyl/config.yml`:
+
+```yaml
+system:
+  sftp:
+    bind_port: 2022
+    bind_address: 0.0.0.0
+    read_only: false
+```
+
+### SFTP Connection
+
+Users connect with the format:
+
+```bash
+sftp -P 2022 username.serverid@node.example.com
+```
+
+Example:
+```bash
+sftp -P 2022 john.a1b2c3d4@node.example.com
+```
+
+### SFTP Authentication Flow
+
+1. User connects to Wings SFTP server
+2. Wings extracts username and server ID
+3. Wings calls Panel's `/api/remote/sftp/auth` endpoint (app/Http/Controllers/Api/Remote/SftpAuthenticationController.php:34)
+4. Panel validates credentials and permissions
+5. Panel returns user UUID and permissions
+6. Wings grants access to server files
+
+### SFTP Permissions
+
+The Panel returns permissions for the authenticated user:
+
+```json
+{
+  "user": "user-uuid",
+  "server": "server-uuid",
+  "permissions": [
+    "file.read",
+    "file.write",
+    "file.delete",
+    "file.archive"
+  ]
+}
+```
+
+Wings enforces these permissions on SFTP operations.
+
+## Wings API Networking
+
+### API Configuration
+
+```yaml
+api:
+  host: 0.0.0.0
+  port: 8080
+  ssl:
+    enabled: true
+    cert: /etc/letsencrypt/live/node.example.com/fullchain.pem
+    key: /etc/letsencrypt/live/node.example.com/privkey.pem
+```
+
+### API Endpoints
+
+The Panel communicates with Wings through these endpoints:
+
+- `GET /api/system` - System information
+- `GET /api/servers` - List all servers
+- `GET /api/servers/{uuid}` - Server details
+- `POST /api/servers/{uuid}/power` - Power actions
+- `POST /api/servers/{uuid}/commands` - Send console command
+- `GET /api/servers/{uuid}/logs` - Get console logs
+- `GET /api/servers/{uuid}/files` - List files
+- `POST /api/servers/{uuid}/files/upload` - Upload file
+
+### Authentication
+
+Wings API uses token-based authentication:
+
+```http
+GET /api/servers HTTP/1.1
+Host: node.example.com:8080
+Authorization: Bearer <node-token>
+```
+
+The token is configured in `/etc/pterodactyl/config.yml`:
+
+```yaml
+token: your-secret-token
+```
+
+## WebSocket Console
+
+Wings streams server console output via WebSocket.
+
+### WebSocket Connection
+
+Clients connect to:
+
+```
+wss://node.example.com:8080/api/servers/{uuid}/ws
+```
+
+Authentication uses a JWT token from the Panel.
+
+### CORS Configuration
+
+Restrict WebSocket origins:
+
+```yaml
+allowed_origins:
+  - https://panel.example.com
+```
+
+This prevents unauthorized domains from connecting to server consoles.
+
+## Network Performance Optimization
+
+### TCP BBR Congestion Control
+
+Enable BBR for better throughput:
+
+```bash
+# Enable BBR
+echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
+echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
+sysctl -p
+
+# Verify
+sysctl net.ipv4.tcp_congestion_control
+```
+
+### Network Buffer Tuning
+
+```bash
+# Increase network buffers
+echo "net.core.rmem_max=16777216" >> /etc/sysctl.conf
+echo "net.core.wmem_max=16777216" >> /etc/sysctl.conf
+echo "net.ipv4.tcp_rmem=4096 87380 16777216" >> /etc/sysctl.conf
+echo "net.ipv4.tcp_wmem=4096 65536 16777216" >> /etc/sysctl.conf
+sysctl -p
+```
+
+### Connection Tracking
+
+Increase conntrack limits for high-traffic nodes:
+
+```bash
+# Increase connection tracking
+echo "net.netfilter.nf_conntrack_max=262144" >> /etc/sysctl.conf
+echo "net.netfilter.nf_conntrack_tcp_timeout_established=3600" >> /etc/sysctl.conf
+sysctl -p
+```
+
+## Port Allocation Best Practices
+
+### Port Ranges
+
+Recommended port allocation strategy:
+
+```
+Wings Services:     1-10000
+  - Wings API:      8080
+  - SFTP:           2022
+  - Reserved:       1-1023
+
+Game Servers:       25565-30000
+  - Minecraft:      25565-26000
+  - Source Games:   27000-28000
+  - Voice (TS3):    9987-10000
+  - Other Games:    28001-30000
+```
+
+### Allocation Creation
+
+Create allocations in bulk:
+
+```bash
+# In Panel → Nodes → Allocations
+# IP: 0.0.0.0
+# Ports: 25565-25665
+```
+
+Or via API:
+
+```bash
+curl -X POST "https://panel.example.com/api/application/nodes/1/allocations" \
+  -H "Authorization: Bearer <api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ip": "0.0.0.0",
+    "ports": ["25565-25665"]
+  }'
+```
+
+## IPv6 Support
+
+Wings supports IPv6 allocations:
+
+### Enable IPv6
+
+```bash
+# Enable IPv6 in Docker
+echo '{"ipv6": true, "fixed-cidr-v6": "2001:db8:1::/64"}' > /etc/docker/daemon.json
+systemctl restart docker
+```
+
+### IPv6 Allocations
+
+Add IPv6 allocations in the Panel:
+
+```
+2001:db8::1:25565
+2001:db8::1:25566
+```
+
+## Troubleshooting
+
+### Port Already in Use
+
+```bash
+# Check what's using a port
+lsof -i :25565
+ss -tulpn | grep 25565
+
+# Kill process using port
+fuser -k 25565/tcp
+```
+
+### Connection Refused
+
+```bash
+# Test port connectivity
+telnet node.example.com 25565
+nc -zv node.example.com 25565
+
+# Check firewall
+ufw status
+iptables -L -n | grep 25565
+```
+
+### Wings API Unreachable
+
+```bash
+# Test Wings API
+curl -k https://node.example.com:8080/api/system
+
+# Check Wings is listening
+ss -tulpn | grep 8080
+
+# Check SSL certificate
+openssl s_client -connect node.example.com:8080
+```
+
+### SFTP Connection Issues
+
+```bash
+# Test SFTP port
+telnet node.example.com 2022
+
+# Check Wings SFTP logs
+journalctl -u wings | grep sftp
+
+# Verify SFTP config
+grep -A 5 'sftp:' /etc/pterodactyl/config.yml
+```
+
+## Advanced Networking
+
+### Custom Docker Network
+
+Create a dedicated network for Pterodactyl:
+
+```bash
+# Create network
+docker network create --driver bridge pterodactyl
+
+# Configure Wings to use it
+# (This requires Wings configuration changes)
+```
+
+### Network Isolation
+
+Isolate servers from each other:
+
+```bash
+# Use separate Docker networks per server
+# Configure via egg configuration
+```
+
+### DDoS Protection
+
+Integrate with DDoS protection:
+
+1. Use separate IPs for protected servers
+2. Route traffic through protection service
+3. Configure protected IPs in Panel allocations
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Security" icon="shield" href="/wings/security">
+    Secure your network configuration
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/wings/monitoring">
+    Monitor network performance
+  </Card>
+  <Card title="Docker Management" icon="docker" href="/wings/docker-management">
+    Learn about container networking
+  </Card>
+  <Card title="Configuration" icon="gear" href="/wings/configuration">
+    Advanced configuration options
+  </Card>
+</CardGroup>

@@ -1,0 +1,588 @@
+---
+title: 'Troubleshooting'
+description: 'Common issues and solutions for Pterodactyl Panel'
+---
+
+This guide covers common issues you may encounter when running Pterodactyl Panel and their solutions.
+
+## Installation Issues
+
+### Database Connection Failed
+
+**Symptoms**: Cannot connect to database during setup
+
+**Error Message**: 
+```
+Illuminate\Database\QueryException
+Could not find driver (SQL: select * from information_schema.tables...)
+```
+
+**Solutions**:
+
+1. **Install MySQL/MariaDB PHP extension**:
+```bash
+# Ubuntu/Debian
+sudo apt install php8.3-mysql
+
+# RHEL/CentOS
+sudo yum install php-mysqlnd
+```
+
+2. **Verify database credentials** in `.env`:
+```env
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=panel
+DB_USERNAME=pterodactyl
+DB_PASSWORD=yourpassword
+```
+
+3. **Test database connection**:
+```bash
+mysql -u pterodactyl -p -h 127.0.0.1 panel
+```
+
+4. **Check MySQL is running**:
+```bash
+sudo systemctl status mysql
+sudo systemctl start mysql
+```
+
+### Composer Install Fails
+
+**Error Message**:
+```
+Your requirements could not be resolved to an installable set of packages
+```
+
+**Solutions**:
+
+1. **Update Composer**:
+```bash
+composer self-update
+```
+
+2. **Clear Composer cache**:
+```bash
+composer clear-cache
+```
+
+3. **Check PHP version**:
+```bash
+php -v  # Should be 8.2 or higher
+```
+
+4. **Install dependencies with correct flags**:
+```bash
+composer install --no-dev --optimize-autoloader
+```
+
+### Permission Denied Errors
+
+**Error Message**:
+```
+failed to open stream: Permission denied
+```
+
+**Solutions**:
+
+1. **Set proper ownership**:
+```bash
+# If using Nginx
+sudo chown -R www-data:www-data /var/www/pterodactyl
+
+# If using Apache
+sudo chown -R apache:apache /var/www/pterodactyl
+```
+
+2. **Set proper permissions**:
+```bash
+cd /var/www/pterodactyl
+sudo chmod -R 755 storage bootstrap/cache
+```
+
+3. **Fix SELinux contexts** (RHEL/CentOS):
+```bash
+sudo restorecon -R /var/www/pterodactyl
+```
+
+## Login and Authentication Issues
+
+### Cannot Login - "Invalid Credentials"
+
+**Symptoms**: Correct credentials but cannot login
+
+**Solutions**:
+
+1. **Reset user password**:
+```bash
+php artisan p:user:make
+# Or update existing user
+php artisan p:user:password <email>
+```
+
+2. **Clear sessions**:
+```bash
+php artisan session:clear
+redis-cli FLUSHDB  # If using Redis
+```
+
+3. **Check session driver** in `.env`:
+```env
+SESSION_DRIVER=redis  # Or database, file
+```
+
+### Two-Factor Authentication Issues
+
+**Symptoms**: Lost 2FA device, cannot access account
+
+**Solutions**:
+
+1. **Disable 2FA for user**:
+```sql
+USE panel;
+UPDATE users SET use_totp = 0 WHERE email = 'user@example.com';
+```
+
+2. **Use recovery tokens** if available (shown during 2FA setup)
+
+3. **Check system time** is synchronized:
+```bash
+sudo timedatectl set-ntp true
+timedatectl status
+```
+
+### "Too Many Login Attempts"
+
+**Symptoms**: Rate limited after failed logins
+
+**Solutions**:
+
+1. **Wait** the time specified in the error message
+
+2. **Clear rate limit cache**:
+```bash
+php artisan cache:clear
+redis-cli FLUSHDB
+```
+
+3. **Check IP address** if behind proxy, configure trusted proxies in `.env`:
+```env
+TRUSTED_PROXIES=*
+```
+
+## Server Management Issues
+
+### Servers Stuck in "Installing" State
+
+**Symptoms**: Servers remain in installing status indefinitely
+
+**Solutions**:
+
+1. **Check Wings logs**:
+```bash
+sudo journalctl -u wings -n 100
+```
+
+2. **Verify Wings connectivity**:
+```bash
+curl -k https://node.example.com:8080
+```
+
+3. **Manually reset server state**:
+```sql
+USE panel;
+UPDATE servers SET status = NULL WHERE status = 'installing';
+```
+
+4. **Restart Wings** (automatically resets failed states in v1.11+):
+```bash
+sudo systemctl restart wings
+```
+
+### Cannot Start/Stop Servers
+
+**Symptoms**: Server power actions fail
+
+**Error Message**:
+```
+Server must be online in order to send commands
+```
+
+**Solutions**:
+
+1. **Check Wings status**:
+```bash
+sudo systemctl status wings
+sudo journalctl -u wings --since "10 minutes ago"
+```
+
+2. **Verify server installation** completed successfully
+
+3. **Check Docker container**:
+```bash
+sudo docker ps -a | grep pterodactyl
+```
+
+4. **Review Wings configuration**:
+```bash
+sudo wings configure --panel-url https://panel.example.com
+```
+
+### File Manager Not Loading
+
+**Symptoms**: File manager shows loading spinner indefinitely
+
+**Solutions**:
+
+1. **Check browser console** for errors (F12)
+
+2. **Verify Wings is running** and accessible
+
+3. **Check CORS configuration** in `.env`:
+```env
+APP_CORS_ALLOWED_ORIGINS=*
+```
+
+4. **Clear browser cache** and cookies
+
+5. **Verify allocation** is properly assigned to server
+
+## Performance Issues
+
+### Slow Page Load Times
+
+**Symptoms**: Panel takes a long time to load pages
+
+**Solutions**:
+
+1. **Enable caching**:
+```bash
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
+
+2. **Use Redis** for cache and sessions:
+```env
+CACHE_DRIVER=redis
+SESSION_DRIVER=redis
+QUEUE_CONNECTION=redis
+```
+
+3. **Enable OPcache** in `php.ini`:
+```ini
+opcache.enable=1
+opcache.memory_consumption=128
+opcache.interned_strings_buffer=8
+opcache.max_accelerated_files=10000
+opcache.revalidate_freq=2
+```
+
+4. **Check server resources**:
+```bash
+htop
+free -h
+df -h
+```
+
+5. **Optimize database**:
+```bash
+php artisan db:optimize
+```
+
+### High CPU Usage
+
+**Symptoms**: Panel server CPU usage is high
+
+**Solutions**:
+
+1. **Check queue workers**:
+```bash
+ps aux | grep artisan
+```
+
+2. **Limit queue workers** in supervisor config:
+```ini
+numprocs=2
+```
+
+3. **Enable query caching** in database
+
+4. **Review application logs** for repeated errors:
+```bash
+tail -f storage/logs/laravel.log
+```
+
+### High Memory Usage
+
+**Solutions**:
+
+1. **Increase PHP memory limit** in `php.ini`:
+```ini
+memory_limit = 256M
+```
+
+2. **Restart PHP-FPM**:
+```bash
+sudo systemctl restart php8.3-fpm
+```
+
+3. **Check for memory leaks** in queue workers:
+```bash
+sudo supervisorctl restart all
+```
+
+## API Issues
+
+### 401 Unauthorized
+
+**Symptoms**: API requests return 401
+
+**Solutions**:
+
+1. **Verify API key** is correct and not expired:
+```bash
+curl -H "Authorization: Bearer ptla_key" \
+     -H "Accept: application/json" \
+     https://panel.example.com/api/application/users
+```
+
+2. **Check API key permissions** in admin panel
+
+3. **Ensure proper headers**:
+```http
+Authorization: Bearer {api_key}
+Accept: application/json
+Content-Type: application/json
+```
+
+### 429 Too Many Requests
+
+**Symptoms**: API requests are rate limited
+
+**Solutions**:
+
+1. **Implement retry logic** with backoff
+
+2. **Increase rate limits** in `.env`:
+```env
+APP_API_CLIENT_RATELIMIT=512
+APP_API_APPLICATION_RATELIMIT=512
+```
+
+3. **Use request batching** and includes:
+```bash
+# Instead of multiple requests
+curl /api/application/servers/1?include=databases,allocations
+```
+
+4. **Check rate limit headers**:
+```http
+X-RateLimit-Limit: 256
+X-RateLimit-Remaining: 0
+Retry-After: 42
+```
+
+### 502 Bad Gateway
+
+**Symptoms**: API returns 502 when communicating with Wings
+
+**Solutions**:
+
+1. **Verify Wings is running**:
+```bash
+sudo systemctl status wings
+```
+
+2. **Check Wings logs**:
+```bash
+sudo journalctl -u wings -n 50
+```
+
+3. **Test Wings connectivity**:
+```bash
+curl -k https://node.example.com:8080/api/system
+```
+
+4. **Verify SSL certificates** are valid
+
+5. **Check firewall rules**:
+```bash
+sudo ufw allow 8080/tcp
+```
+
+## Email Issues
+
+### Emails Not Sending
+
+**Symptoms**: Password resets, notifications not received
+
+**Solutions**:
+
+1. **Test email configuration**:
+```bash
+php artisan p:mail:test user@example.com
+```
+
+2. **Check mail settings** in `.env`:
+```env
+MAIL_DRIVER=smtp
+MAIL_HOST=smtp.example.com
+MAIL_PORT=587
+MAIL_USERNAME=apikey
+MAIL_PASSWORD=your-api-key
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=noreply@example.com
+```
+
+3. **Review mail logs**:
+```bash
+tail -f storage/logs/laravel.log | grep mail
+```
+
+4. **Check queue worker** is running:
+```bash
+sudo supervisorctl status
+```
+
+5. **Verify SPF/DKIM records** for email domain
+
+## Database Issues
+
+### Connection Pool Exhausted
+
+**Error Message**:
+```
+Too many connections
+```
+
+**Solutions**:
+
+1. **Increase max connections** in MySQL:
+```sql
+SET GLOBAL max_connections = 200;
+```
+
+2. **Make permanent** in `my.cnf`:
+```ini
+[mysqld]
+max_connections = 200
+```
+
+3. **Check for connection leaks**:
+```sql
+SHOW PROCESSLIST;
+```
+
+4. **Restart MySQL**:
+```bash
+sudo systemctl restart mysql
+```
+
+### Database Lock Errors
+
+**Error Message**:
+```
+Deadlock found when trying to get lock
+```
+
+**Solutions**:
+
+1. **Retry the operation** (Laravel handles this automatically)
+
+2. **Check for long-running queries**:
+```sql
+SHOW FULL PROCESSLIST;
+```
+
+3. **Optimize tables**:
+```sql
+OPTIMIZE TABLE servers;
+OPTIMIZE TABLE allocations;
+```
+
+4. **Restart MySQL** if persistent
+
+## Common Error Messages
+
+### "This server is in a failed install state"
+
+**Solution**: Delete and recreate the server, or manually fix via:
+
+```sql
+UPDATE servers SET status = NULL WHERE id = SERVER_ID;
+```
+
+Then re-run installation.
+
+### "No valid server identifier was included"
+
+**Cause**: Server UUID or ID is invalid
+
+**Solution**: Verify the server exists and you have access permissions
+
+### "Server transfers are already enabled"
+
+**Cause**: Server is already being transferred
+
+**Solution**: Wait for transfer to complete or cancel it:
+
+```sql
+DELETE FROM server_transfers WHERE server_id = SERVER_ID;
+```
+
+### "The backup limit for this server has been reached"
+
+**Solution**: Delete old backups or increase backup limit in server settings
+
+## Wings-Specific Issues
+
+See the [Wings Troubleshooting](/wings/monitoring) page for Wings-specific issues.
+
+## Getting Help
+
+### Collect Diagnostic Information
+
+Before seeking help, collect:
+
+1. **Panel version**:
+```bash
+php artisan p:info
+```
+
+2. **Error logs**:
+```bash
+tail -n 100 storage/logs/laravel.log
+```
+
+3. **System information**:
+```bash
+php -v
+composer --version
+mysql --version
+```
+
+4. **Configuration** (sanitize sensitive data):
+```bash
+cat .env | grep -v PASSWORD | grep -v KEY | grep -v SECRET
+```
+
+### Community Resources
+
+- **Discord**: [discord.gg/pterodactyl](https://discord.gg/pterodactyl)
+- **Documentation**: [pterodactyl.io/docs](https://pterodactyl.io/panel/1.0/getting_started.html)
+- **GitHub Issues**: [github.com/pterodactyl/panel/issues](https://github.com/pterodactyl/panel/issues)
+- **Community Guides**: Search Discord pins and GitHub discussions
+
+### Best Practices for Asking for Help
+
+1. **Search first** - Your issue may already be answered
+2. **Provide version information** - Panel and Wings versions
+3. **Include error messages** - Full, unredacted logs
+4. **Describe what you tried** - Show troubleshooting steps taken
+5. **Be patient and respectful** - Community support is volunteer-based
+
+<Warning>
+  Never share sensitive information like API keys, passwords, or private keys when asking for help.
+</Warning>

@@ -1,0 +1,471 @@
+---
+title: Task Scheduling
+description: Automate server tasks with cron-based schedules
+---
+
+Schedules allow you to automate repetitive tasks on your server using cron syntax. Execute commands, create backups, or perform power actions at specified times or intervals.
+
+## Creating a Schedule
+
+Create a new schedule with cron timing:
+
+```bash Create Schedule
+POST /api/client/servers/{server}/schedules
+Content-Type: application/json
+
+{
+  "name": "Daily Restart",
+  "minute": "0",
+  "hour": "4",
+  "day_of_month": "*",
+  "month": "*",
+  "day_of_week": "*",
+  "is_active": true,
+  "only_when_online": false
+}
+```
+
+```json Response
+{
+  "object": "server_schedule",
+  "attributes": {
+    "id": 3,
+    "name": "Daily Restart",
+    "cron": {
+      "minute": "0",
+      "hour": "4",
+      "day_of_month": "*",
+      "month": "*",
+      "day_of_week": "*"
+    },
+    "is_active": true,
+    "is_processing": false,
+    "only_when_online": false,
+    "last_run_at": null,
+    "next_run_at": "2025-01-16T04:00:00+00:00",
+    "created_at": "2025-01-15T10:30:00+00:00",
+    "relationships": {
+      "tasks": {
+        "data": []
+      }
+    }
+  }
+}
+```
+
+<Steps>
+  <Step title="Navigate to Schedules">
+    Go to the Schedules tab in your server panel.
+  </Step>
+  
+  <Step title="Configure Timing">
+    Set the cron expression using the five fields:
+    - Minute (0-59)
+    - Hour (0-23)
+    - Day of Month (1-31)
+    - Month (1-12)
+    - Day of Week (0-6, Sunday=0)
+  </Step>
+  
+  <Step title="Add Tasks">
+    After creating the schedule, add one or more tasks to execute.
+  </Step>
+  
+  <Step title="Activate Schedule">
+    Toggle the schedule to active. It will run at the next matching time.
+  </Step>
+</Steps>
+
+## Cron Syntax
+
+Understanding cron timing:
+
+```
+* * * * *
+│ │ │ │ └─── Day of Week (0-6, Sunday=0)
+│ │ │ └───── Month (1-12)
+│ │ └─────── Day of Month (1-31)
+│ └───────── Hour (0-23)
+└─────────── Minute (0-59)
+```
+
+### Common Examples
+
+<CodeGroup>
+```cron Every Hour
+0 * * * *
+```
+
+```cron Every 6 Hours
+0 */6 * * *
+```
+
+```cron Daily at 3 AM
+0 3 * * *
+```
+
+```cron Every Monday at 2:30 AM
+30 2 * * 1
+```
+
+```cron First day of month at midnight
+0 0 1 * *
+```
+
+```cron Every 15 minutes
+*/15 * * * *
+```
+
+```cron Weekdays at 9 AM
+0 9 * * 1-5
+```
+</CodeGroup>
+
+### Special Wildcards
+
+- `*` - Any value (every minute, hour, etc.)
+- `*/5` - Every 5th value (every 5 minutes)
+- `1,15,30` - Specific values (1st, 15th, and 30th)
+- `10-20` - Range of values (10 through 20)
+- `*/2` with range: `10-20/2` - Every 2nd value in range
+
+## Adding Tasks to Schedules
+
+Schedules execute one or more tasks in sequence:
+
+```bash Add Task
+POST /api/client/servers/{server}/schedules/{schedule}/tasks
+Content-Type: application/json
+
+{
+  "action": "command",
+  "payload": "say Server restarting in 5 minutes!",
+  "time_offset": 0,
+  "continue_on_failure": false
+}
+```
+
+### Task Types
+
+#### 1. Command Task
+
+Execute a server command:
+
+```json
+{
+  "action": "command",
+  "payload": "save-all",
+  "time_offset": 0
+}
+```
+
+#### 2. Power Task
+
+Control server power state:
+
+```json
+{
+  "action": "power",
+  "payload": "restart",
+  "time_offset": 300
+}
+```
+
+Valid power payloads: `start`, `stop`, `restart`, `kill`
+
+#### 3. Backup Task
+
+Create a server backup:
+
+```json
+{
+  "action": "backup",
+  "payload": "",
+  "time_offset": 0
+}
+```
+
+<Note>
+Backup tasks don't require a payload. The backup is created with an auto-generated name.
+</Note>
+
+### Task Timing
+
+The `time_offset` field adds a delay (in seconds) before executing the task:
+
+```json Task Sequence Example
+[
+  {
+    "action": "command",
+    "payload": "say Restart in 5 minutes!",
+    "time_offset": 0
+  },
+  {
+    "action": "command",
+    "payload": "say Restart in 1 minute!",
+    "time_offset": 240
+  },
+  {
+    "action": "command",
+    "payload": "save-all",
+    "time_offset": 290
+  },
+  {
+    "action": "power",
+    "payload": "restart",
+    "time_offset": 300
+  }
+]
+```
+
+This creates a 5-minute restart warning sequence.
+
+<Note>
+Time offset is relative to when the schedule starts, not between tasks. Maximum offset is 900 seconds (15 minutes).
+</Note>
+
+## Listing Schedules
+
+View all schedules for a server:
+
+```bash List Schedules
+GET /api/client/servers/{server}/schedules
+```
+
+```json Response
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "server_schedule",
+      "attributes": {
+        "id": 1,
+        "name": "Daily Backup",
+        "cron": {
+          "minute": "0",
+          "hour": "2",
+          "day_of_month": "*",
+          "month": "*",
+          "day_of_week": "*"
+        },
+        "is_active": true,
+        "is_processing": false,
+        "only_when_online": true,
+        "last_run_at": "2025-01-15T02:00:00+00:00",
+        "next_run_at": "2025-01-16T02:00:00+00:00",
+        "relationships": {
+          "tasks": {
+            "data": [
+              {
+                "object": "schedule_task",
+                "attributes": {
+                  "id": 1,
+                  "sequence_id": 1,
+                  "action": "backup",
+                  "payload": "",
+                  "time_offset": 0,
+                  "is_queued": false,
+                  "continue_on_failure": false
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+## Updating a Schedule
+
+Modify schedule timing or settings:
+
+```bash Update Schedule
+POST /api/client/servers/{server}/schedules/{schedule}
+Content-Type: application/json
+
+{
+  "name": "Daily Restart (Updated)",
+  "minute": "0",
+  "hour": "5",
+  "day_of_month": "*",
+  "month": "*",
+  "day_of_week": "*",
+  "is_active": true,
+  "only_when_online": false
+}
+```
+
+<Note>
+Updating the schedule recalculates the `next_run_at` timestamp based on the new cron expression.
+</Note>
+
+## Manual Execution
+
+Trigger a schedule immediately:
+
+```bash Trigger Schedule
+POST /api/client/servers/{server}/schedules/{schedule}/execute
+```
+
+```json Response
+HTTP/1.1 202 Accepted
+```
+
+This runs all tasks in the schedule immediately, regardless of the cron timing.
+
+<Warning>
+Manual execution doesn't affect the regular schedule. The schedule will still run at its next scheduled time.
+</Warning>
+
+## Only When Online
+
+The `only_when_online` flag controls whether the schedule runs when the server is offline:
+
+```json
+{
+  "only_when_online": true
+}
+```
+
+- `true` - Schedule only runs if server is running
+- `false` - Schedule runs regardless of server state (can start stopped servers)
+
+<Note>
+Useful for in-game announcements that shouldn't run when no one is online, or for automatic starts/restarts that need to run even when offline.
+</Note>
+
+## Deleting a Schedule
+
+Remove a schedule and all its tasks:
+
+```bash Delete Schedule
+DELETE /api/client/servers/{server}/schedules/{schedule}
+```
+
+```json Success
+HTTP/1.1 204 No Content
+```
+
+## Common Schedule Examples
+
+<AccordionGroup>
+  <Accordion title="Nightly Restart with Warnings">
+    Restart server every night at 4 AM with player warnings:
+    
+    **Schedule:** `0 4 * * *` (Daily at 4 AM)
+    
+    **Tasks:**
+    1. Command: `say Server restarting in 5 minutes!` (offset: 0s)
+    2. Command: `say Server restarting in 1 minute!` (offset: 240s)
+    3. Command: `save-all` (offset: 290s)
+    4. Power: `restart` (offset: 300s)
+  </Accordion>
+  
+  <Accordion title="Hourly Backup">
+    Create backup every hour:
+    
+    **Schedule:** `0 * * * *` (Every hour)
+    
+    **Tasks:**
+    1. Backup: (offset: 0s)
+    
+    Set `only_when_online: true` to only backup when server is active.
+  </Accordion>
+  
+  <Accordion title="Weekly Maintenance">
+    Perform maintenance every Sunday at 3 AM:
+    
+    **Schedule:** `0 3 * * 0` (Sundays at 3 AM)
+    
+    **Tasks:**
+    1. Command: `save-all` (offset: 0s)
+    2. Backup: (offset: 10s)
+    3. Power: `stop` (offset: 60s)
+    4. Power: `start` (offset: 300s)
+  </Accordion>
+  
+  <Accordion title="Save Reminders">
+    Remind admins to save every 30 minutes during peak hours:
+    
+    **Schedule:** `*/30 18-22 * * *` (Every 30 min, 6 PM - 10 PM)
+    
+    **Tasks:**
+    1. Command: `say Remember to save your work!` (offset: 0s)
+  </Accordion>
+</AccordionGroup>
+
+## Activity Logging
+
+Schedule operations are logged:
+
+```json Example Logs
+{
+  "event": "server:schedule.create",
+  "properties": {
+    "name": "Daily Restart"
+  }
+}
+
+{
+  "event": "server:schedule.execute",
+  "properties": {
+    "name": "Daily Restart"
+  }
+}
+
+{
+  "event": "server:schedule.update",
+  "properties": {
+    "name": "Daily Restart",
+    "active": true
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Add Warnings">
+    When scheduling restarts, always warn players several minutes in advance. Use multiple warning tasks at different offsets.
+  </Accordion>
+  
+  <Accordion title="Test Schedules Manually">
+    Before activating a schedule, test it using the manual execution feature to ensure tasks work correctly.
+  </Accordion>
+  
+  <Accordion title="Use Descriptive Names">
+    Name schedules clearly: "Daily 4AM Restart", "Hourly Backup", "Weekly Maintenance" - makes management easier.
+  </Accordion>
+  
+  <Accordion title="Coordinate Timings">
+    Avoid scheduling multiple intensive tasks (backups, restarts) at the same time. Stagger them by at least 15 minutes.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Schedule Not Running">
+    - Verify schedule is set to active
+    - Check cron expression is valid
+    - If `only_when_online` is true, ensure server is running
+    - Check panel logs for errors
+    - Verify `next_run_at` timestamp is in the future
+  </Accordion>
+  
+  <Accordion title="Tasks Failing">
+    - Verify commands are correct for your game
+    - Check server has required permissions
+    - Review activity logs for error messages
+    - Test commands manually via console first
+  </Accordion>
+  
+  <Accordion title="Wrong Execution Time">
+    Schedules use UTC time by default. Check your panel timezone settings:
+    - Panel runs in UTC
+    - Convert your local time to UTC
+    - Account for daylight saving time
+  </Accordion>
+</AccordionGroup>

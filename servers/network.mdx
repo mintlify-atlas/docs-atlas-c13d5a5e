@@ -1,0 +1,428 @@
+---
+title: Network & Allocations
+description: Managing port allocations and network connectivity
+---
+
+Network allocations define the IP addresses and ports your server can use. Each server has a primary allocation and can have additional allocations for plugins, query ports, or other services.
+
+## Understanding Allocations
+
+An allocation is an IP:Port combination assigned to your server:
+
+```json Allocation Object
+{
+  "object": "allocation",
+  "attributes": {
+    "id": 5,
+    "ip": "192.168.1.100",
+    "ip_alias": "node01.example.com",
+    "port": 25565,
+    "notes": "Primary Minecraft port",
+    "is_default": true
+  }
+}
+```
+
+### Allocation Properties
+
+- `ip` - The actual IP address
+- `ip_alias` - Friendly hostname (if configured)
+- `port` - The port number
+- `notes` - User-defined description
+- `is_default` - Whether this is the primary allocation
+
+## Listing Allocations
+
+View all allocations for your server:
+
+```bash List Allocations
+GET /api/client/servers/{server}/network/allocations
+```
+
+```json Response
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "allocation",
+      "attributes": {
+        "id": 5,
+        "ip": "192.168.1.100",
+        "ip_alias": "node01.example.com",
+        "port": 25565,
+        "notes": "Primary game port",
+        "is_default": true
+      }
+    },
+    {
+      "object": "allocation",
+      "attributes": {
+        "id": 6,
+        "ip": "192.168.1.100",
+        "ip_alias": "node01.example.com",
+        "port": 25575,
+        "notes": "RCON port",
+        "is_default": false
+      }
+    }
+  ]
+}
+```
+
+## Primary Allocation
+
+The primary allocation is used by default when starting your server. It's passed to the startup command as the `SERVER_PORT` variable.
+
+### Setting Primary Allocation
+
+Change which allocation is primary:
+
+```bash Set Primary
+POST /api/client/servers/{server}/network/allocations/{allocation}/primary
+```
+
+```json Response
+{
+  "object": "allocation",
+  "attributes": {
+    "id": 6,
+    "ip": "192.168.1.100",
+    "port": 25575,
+    "is_default": true
+  }
+}
+```
+
+<Warning>
+Changing the primary allocation typically requires restarting your server for the change to take effect.
+</Warning>
+
+## Creating Additional Allocations
+
+If your server has allocation limit, you can create more:
+
+```bash Create Allocation
+POST /api/client/servers/{server}/network/allocations
+```
+
+```json Response
+{
+  "object": "allocation",
+  "attributes": {
+    "id": 7,
+    "ip": "192.168.1.100",
+    "port": 25566,
+    "notes": null,
+    "is_default": false
+  }
+}
+```
+
+The system automatically finds an available port on the node and assigns it to your server.
+
+<Note>
+Requires an allocation limit to be set on your server. If limit is reached, you'll receive an error.
+</Note>
+
+### Allocation Limit
+
+Check your allocation limit:
+
+```bash
+GET /api/client/servers/{server}
+```
+
+```json
+{
+  "attributes": {
+    "feature_limits": {
+      "allocations": 5
+    }
+  }
+}
+```
+
+If you try to create more allocations than allowed:
+
+```json Error Response
+HTTP/1.1 400 Bad Request
+
+{
+  "errors": [
+    {
+      "code": "DisplayException",
+      "detail": "Cannot assign additional allocations to this server: limit has been reached."
+    }
+  ]
+}
+```
+
+## Updating Allocation Notes
+
+Add descriptions to allocations:
+
+```bash Update Notes
+POST /api/client/servers/{server}/network/allocations/{allocation}
+Content-Type: application/json
+
+{
+  "notes": "RCON port for remote administration"
+}
+```
+
+```json Response
+{
+  "object": "allocation",
+  "attributes": {
+    "id": 6,
+    "ip": "192.168.1.100",
+    "port": 25575,
+    "notes": "RCON port for remote administration",
+    "is_default": false
+  }
+}
+```
+
+Use notes to document what each port is used for:
+- "Primary game port"
+- "RCON/Admin port"
+- "Query port"
+- "Web interface"
+- "Voice server"
+
+## Deleting Allocations
+
+Remove allocations you no longer need:
+
+```bash Delete Allocation
+DELETE /api/client/servers/{server}/network/allocations/{allocation}
+```
+
+```json Success
+HTTP/1.1 204 No Content
+```
+
+<Warning>
+You cannot delete the primary allocation. Set a different allocation as primary first.
+</Warning>
+
+Restrictions:
+- Cannot delete primary allocation
+- Requires allocation limit to be set
+- Port is returned to available pool
+
+## Common Use Cases
+
+<AccordionGroup>
+  <Accordion title="Minecraft Server with RCON">
+    Minecraft servers often need multiple ports:
+    
+    **Primary Allocation (25565):**
+    - Game port for player connections
+    - Set in `server.properties`: `server-port=25565`
+    
+    **Secondary Allocation (25575):**
+    - RCON port for remote commands
+    - Set in `server.properties`: `rcon.port=25575`
+    
+    **Optional Query Port (25565):**
+    - Usually same as game port
+    - For server list pings
+  </Accordion>
+  
+  <Accordion title="Source Engine Game Server">
+    Source games (CS:GO, TF2, etc.) use multiple ports:
+    
+    **Primary Allocation (27015):**
+    - Game port
+    - Set in startup: `+port 27015`
+    
+    **Secondary Allocation (27015 UDP):**
+    - Source TV port: `+tv_port 27020`
+    
+    **Client Port (27005):**
+    - Used for client communication
+  </Accordion>
+  
+  <Accordion title="Multiple Game Instances">
+    Run multiple instances of the same game:
+    
+    - Allocation 1: 25565 (Survival server)
+    - Allocation 2: 25566 (Creative server)
+    - Allocation 3: 25567 (Minigames server)
+    
+    Switch primary allocation based on which instance you want to run.
+  </Accordion>
+  
+  <Accordion title="Web-Based Game Servers">
+    Games with web interfaces need HTTP ports:
+    
+    **Primary Allocation (7777):**
+    - Game port
+    
+    **Secondary Allocation (8080):**
+    - Web admin interface
+    - Configure in game settings
+  </Accordion>
+</AccordionGroup>
+
+## Using Allocations in Startup
+
+Allocations are available as environment variables:
+
+### Primary Allocation
+
+```bash
+SERVER_PORT=25565      # Primary port
+SERVER_IP=0.0.0.0      # Bind to all interfaces
+```
+
+### All Allocations
+
+All allocations are formatted as JSON:
+
+```bash
+ALLOCATIONS='{"192.168.1.100":[25565,25575]}'
+```
+
+Example startup command:
+
+```bash
+java -Xms2G -Xmx2G -jar server.jar --port {{SERVER_PORT}} --host {{SERVER_IP}}
+```
+
+The `{{SERVER_PORT}}` variable is replaced with your primary allocation's port.
+
+## IP Aliases
+
+IP aliases provide friendly hostnames instead of raw IPs:
+
+```json
+{
+  "ip": "192.168.1.100",
+  "ip_alias": "node01.example.com",
+  "port": 25565
+}
+```
+
+Players can connect using:
+- `node01.example.com:25565`
+- `192.168.1.100:25565`
+
+Both point to the same server.
+
+<Note>
+IP aliases are configured by administrators at the node level. Users cannot set custom aliases.
+</Note>
+
+## Firewall Considerations
+
+Ensure ports are accessible:
+
+<Steps>
+  <Step title="Node Firewall">
+    Administrator must open ports on the node's firewall:
+    
+    ```bash
+    # UFW example
+    ufw allow 25565/tcp
+    ufw allow 25575/tcp
+    ```
+  </Step>
+  
+  <Step title="Network Firewall">
+    Check router/cloud provider firewall rules allow traffic to the ports.
+  </Step>
+  
+  <Step title="Game Configuration">
+    Configure your game to listen on the allocated port:
+    
+    ```properties
+    server-port=25565
+    ```
+  </Step>
+  
+  <Step title="Test Connectivity">
+    Use a port checker tool to verify the port is reachable from outside.
+  </Step>
+</Steps>
+
+## Activity Logging
+
+Allocation changes are logged:
+
+```json Example Logs
+{
+  "event": "server:allocation.create",
+  "properties": {
+    "allocation": "192.168.1.100:25566"
+  }
+}
+
+{
+  "event": "server:allocation.primary",
+  "properties": {
+    "allocation": "192.168.1.100:25565"
+  }
+}
+
+{
+  "event": "server:allocation.notes",
+  "properties": {
+    "allocation": "192.168.1.100:25575",
+    "old": null,
+    "new": "RCON port"
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Document Your Ports">
+    Always add notes to allocations explaining their purpose. This helps when troubleshooting or sharing server access.
+  </Accordion>
+  
+  <Accordion title="Use Standard Ports">
+    When possible, use default ports for your game:
+    - Minecraft: 25565
+    - CS:GO: 27015
+    - ARK: 7777
+    
+    This makes it easier for players to connect.
+  </Accordion>
+  
+  <Accordion title="Delete Unused Allocations">
+    Remove allocations you're not using to free them for other servers on the node.
+  </Accordion>
+  
+  <Accordion title="Test After Changes">
+    Always test connectivity after changing primary allocation or creating new ports.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Cannot Connect to Server">
+    - Verify server is running
+    - Check primary allocation port matches server config
+    - Test port with telnet: `telnet node01.example.com 25565`
+    - Verify firewall allows the port
+    - Check Wings is binding to correct IP
+  </Accordion>
+  
+  <Accordion title="Port Already in Use">
+    If Wings reports port conflict:
+    - Another server may be using the port
+    - System service might be on that port
+    - Contact administrator to reassign port
+  </Accordion>
+  
+  <Accordion title="Cannot Create More Allocations">
+    - Check allocation limit on your server
+    - Delete unused allocations
+    - Request limit increase from admin
+    - Verify node has available ports
+  </Accordion>
+</AccordionGroup>

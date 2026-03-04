@@ -1,0 +1,383 @@
+---
+title: Location Management
+description: Organizing nodes by geographic or logical locations
+---
+
+Locations help organize your nodes geographically or logically. They serve as a way to group nodes and provide a cleaner deployment interface for administrators and users.
+
+## What are Locations?
+
+Locations are simple organizational units that group nodes together. They're commonly used to represent:
+
+- **Geographic Locations**: US-East, EU-West, Asia-Pacific
+- **Data Centers**: NYC1, LON1, SFO2
+- **Providers**: AWS, DigitalOcean, OVH
+- **Logical Groups**: Production, Development, Testing
+
+## Location Model
+
+Locations are simple models with minimal fields (from `app/Models/Location.php:42-45`):
+
+```php
+public static array $validationRules = [
+    'short' => 'required|string|between:1,60|unique:locations,short',
+    'long' => 'string|nullable|between:1,191',
+];
+```
+
+### Fields
+
+- **short**: A short identifier (e.g., "us-east", "eu-1")
+  - Required
+  - 1-60 characters
+  - Must be unique
+- **long**: A descriptive name (e.g., "United States - East Coast")
+  - Optional
+  - Up to 191 characters
+
+## Creating a Location
+
+<Steps>
+  <Step title="Navigate to Locations">
+    Go to **Admin Panel** → **Locations**
+  </Step>
+  
+  <Step title="Fill in Details">
+    **Location Information**
+    - **Short Code**: A unique identifier (e.g., `us-east`)
+    - **Description**: Full descriptive name (e.g., `United States - East Coast`)
+  </Step>
+  
+  <Step title="Create Location">
+    Click **Create** to save the location
+  </Step>
+</Steps>
+
+<Note>
+Locations must be created before you can add nodes. Each node must be assigned to a location.
+</Note>
+
+## Viewing Locations
+
+The locations index page displays:
+
+- Short code
+- Long description
+- Number of nodes in the location
+- Number of servers in the location
+
+From `app/Http/Controllers/Admin/LocationController.php:36-40`:
+
+```php
+public function index(): View
+{
+    return view('admin.locations.index', [
+        'locations' => $this->repository->getAllWithDetails(),
+    ]);
+}
+```
+
+## Location Details
+
+Clicking on a location shows:
+
+- All nodes assigned to this location
+- Node statistics (servers, memory, disk)
+- Total resources across all nodes
+- Ability to edit or delete the location
+
+## Updating a Location
+
+<Steps>
+  <Step title="Navigate to Location">
+    Click on the location you want to edit
+  </Step>
+  
+  <Step title="Modify Details">
+    Update the short code or description
+  </Step>
+  
+  <Step title="Save Changes">
+    Click **Update** to save your changes
+  </Step>
+</Steps>
+
+From `app/Http/Controllers/Admin/LocationController.php:73-82`:
+
+```php
+public function update(LocationFormRequest $request, Location $location): RedirectResponse
+{
+    if ($request->input('action') === 'delete') {
+        return $this->delete($location);
+    }
+
+    $this->updateService->handle($location->id, $request->normalize());
+    $this->alert->success('Location was updated successfully.')->flash();
+
+    return redirect()->route('admin.locations.view', $location->id);
+}
+```
+
+## Deleting a Location
+
+<Warning>
+You cannot delete a location that has nodes assigned to it. You must first delete or reassign all nodes.
+</Warning>
+
+To delete a location:
+
+<Steps>
+  <Step title="Remove All Nodes">
+    Ensure no nodes are assigned to this location
+    - Delete nodes, or
+    - Reassign nodes to a different location
+  </Step>
+  
+  <Step title="Delete Location">
+    Navigate to the location and click **Delete**
+  </Step>
+  
+  <Step title="Confirm Deletion">
+    Confirm you want to delete the location
+  </Step>
+</Steps>
+
+From `app/Http/Controllers/Admin/LocationController.php:91-102`:
+
+```php
+public function delete(Location $location): RedirectResponse
+{
+    try {
+        $this->deletionService->handle($location->id);
+
+        return redirect()->route('admin.locations');
+    } catch (DisplayException $ex) {
+        $this->alert->danger($ex->getMessage())->flash();
+    }
+
+    return redirect()->route('admin.locations.view', $location->id);
+}
+```
+
+## Location Relationships
+
+### Nodes
+
+A location has many nodes (from `app/Models/Location.php:57-60`):
+
+```php
+public function nodes(): HasMany
+{
+    return $this->hasMany(Node::class);
+}
+```
+
+### Servers
+
+A location has many servers through nodes (from `app/Models/Location.php:67-70`):
+
+```php
+public function servers(): HasManyThrough
+{
+    return $this->hasManyThrough(Server::class, Node::class);
+}
+```
+
+This allows you to query all servers in a location, even though servers are directly assigned to nodes.
+
+## Use Cases
+
+### Geographic Distribution
+
+Organize nodes by geographic regions for latency optimization:
+
+```
+Locations:
+- us-west (United States - West Coast)
+- us-east (United States - East Coast)
+- eu-central (Europe - Central)
+- asia-pacific (Asia - Pacific)
+```
+
+Users can then choose locations closest to them.
+
+### Data Center Organization
+
+Group nodes by data center:
+
+```
+Locations:
+- nyc1 (New York City - Data Center 1)
+- lon1 (London - Data Center 1)
+- fra1 (Frankfurt - Data Center 1)
+```
+
+### Provider Separation
+
+Separate nodes by hosting provider:
+
+```
+Locations:
+- aws-us-east (Amazon Web Services - US East)
+- do-nyc (DigitalOcean - New York)
+- ovh-eu (OVH - Europe)
+```
+
+### Environment Separation
+
+Separate production from development:
+
+```
+Locations:
+- prod (Production Servers)
+- dev (Development Servers)
+- staging (Staging Environment)
+```
+
+## Server Creation Workflow
+
+Locations affect server creation:
+
+1. User/admin selects a **Location**
+2. System filters available **Nodes** by location
+3. User/admin selects a specific **Node** (or auto-deploy)
+4. Server is created on the selected node
+
+From `app/Http/Controllers/Admin/Servers/CreateServerController.php:55-58`:
+
+```php
+return view('admin.servers.new', [
+    'locations' => Location::all(),
+    'nests' => $nests,
+]);
+```
+
+## Auto-Deployment
+
+When using auto-deployment:
+
+1. Select a location
+2. Don't select a specific node
+3. System finds the best node in that location
+4. Based on available resources
+
+## API Access
+
+Locations are accessible via the API:
+
+```http
+GET /api/application/locations
+```
+
+Returns all locations with their nodes and servers.
+
+## Best Practices
+
+1. **Consistent Naming**: Use a consistent naming scheme
+   - Good: `us-east`, `us-west`, `eu-central`
+   - Bad: `location1`, `loc-2`, `new-location`
+
+2. **Descriptive Long Names**: Make descriptions clear
+   - Good: "United States - East Coast"
+   - Bad: "US East"
+
+3. **Plan Ahead**: Design your location structure before adding nodes
+
+4. **Logical Grouping**: Group nodes by factors that matter to your users
+   - Geographic proximity
+   - Network performance
+   - Provider reliability
+
+5. **Don't Over-Organize**: Too many locations can be confusing
+   - Start with 3-5 locations
+   - Expand as needed
+
+## Common Naming Schemes
+
+### Geographic
+
+```
+Short: us-east
+Long: United States - East Coast
+
+Short: eu-west
+Long: Europe - Western Europe
+
+Short: asia-se
+Long: Asia - Southeast Asia
+```
+
+### Data Center
+
+```
+Short: nyc1
+Long: New York City - Data Center 1
+
+Short: ams1
+Long: Amsterdam - Data Center 1
+
+Short: sgp1
+Long: Singapore - Data Center 1
+```
+
+### Provider-Based
+
+```
+Short: aws-east
+Long: Amazon Web Services - US East
+
+Short: do-nyc
+Long: DigitalOcean - New York
+
+Short: gcp-us
+Long: Google Cloud Platform - US
+```
+
+## Troubleshooting
+
+### Cannot Delete Location
+
+**Problem**: Error when trying to delete a location
+
+**Solution**: The location has nodes assigned to it. Either:
+1. Delete all nodes in the location, or
+2. Reassign nodes to a different location
+
+### Location Not Showing in Dropdown
+
+**Problem**: Location doesn't appear when creating servers
+
+**Solution**: Ensure:
+1. Location was created successfully
+2. At least one node is assigned to the location
+3. Node has available allocations
+
+### Short Code Conflict
+
+**Problem**: "Short code already exists" error
+
+**Solution**: Each location must have a unique short code. Choose a different identifier.
+
+## Migration Considerations
+
+If you need to reorganize locations:
+
+1. **Create New Locations**: Set up your new location structure
+2. **Reassign Nodes**: Move nodes to new locations one by one
+3. **Delete Old Locations**: Remove old locations after all nodes are moved
+
+<Warning>
+Changing a node's location doesn't affect existing servers, but may impact user expectations about geographic placement.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Node Management" icon="cube" href="/admin/nodes">
+    Add nodes to your locations
+  </Card>
+  
+  <Card title="Server Deployment" icon="server" href="/admin/servers">
+    Deploy servers to your organized nodes
+  </Card>
+</CardGroup>

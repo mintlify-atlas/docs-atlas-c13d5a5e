@@ -1,0 +1,549 @@
+---
+title: Servers
+description: Manage game servers and their configurations
+---
+
+The Servers API allows you to create, configure, and manage game servers on the Panel. This includes managing server resources, startup parameters, and server state.
+
+## List Servers
+
+<CodeGroup>
+```bash cURL
+curl "https://panel.example.com/api/application/servers" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Retrieves a paginated list of all servers on the Panel.
+
+### Query Parameters
+
+<ParamField query="per_page" type="integer" default="50">
+  Number of results per page
+</ParamField>
+
+<ParamField query="filter[uuid]" type="string">
+  Filter servers by UUID
+</ParamField>
+
+<ParamField query="filter[uuidShort]" type="string">
+  Filter servers by short UUID
+</ParamField>
+
+<ParamField query="filter[name]" type="string">
+  Filter servers by name
+</ParamField>
+
+<ParamField query="filter[description]" type="string">
+  Filter servers by description
+</ParamField>
+
+<ParamField query="filter[image]" type="string">
+  Filter servers by Docker image
+</ParamField>
+
+<ParamField query="filter[external_id]" type="string">
+  Filter servers by external identifier
+</ParamField>
+
+<ParamField query="sort" type="string">
+  Sort by field. Available: `id`, `uuid`. Prefix with `-` for descending
+</ParamField>
+
+<ParamField query="include" type="string">
+  Include related resources. Available: `allocations`, `user`, `subusers`, `nest`, `egg`, `variables`, `location`, `node`, `databases`
+</ParamField>
+
+### Response
+
+<ResponseField name="object" type="string">
+  Always `list`
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of server objects (see Get Server Details for structure)
+</ResponseField>
+
+## Get Server Details
+
+<CodeGroup>
+```bash cURL
+curl "https://panel.example.com/api/application/servers/{server_id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Retrieves details for a specific server.
+
+### Path Parameters
+
+<ParamField path="server_id" type="integer" required>
+  The internal ID of the server
+</ParamField>
+
+### Response
+
+<ResponseExample>
+```json
+{
+  "object": "server",
+  "attributes": {
+    "id": 1,
+    "external_id": null,
+    "uuid": "8d4f8c5e-2b7a-4c9d-8e1f-9a3b4c5d6e7f",
+    "identifier": "8d4f8c5e",
+    "name": "My Minecraft Server",
+    "description": "A vanilla Minecraft server",
+    "status": "running",
+    "suspended": false,
+    "limits": {
+      "memory": 2048,
+      "swap": 0,
+      "disk": 10240,
+      "io": 500,
+      "cpu": 100,
+      "threads": null,
+      "oom_disabled": true
+    },
+    "feature_limits": {
+      "databases": 1,
+      "allocations": 1,
+      "backups": 3
+    },
+    "user": 1,
+    "node": 1,
+    "allocation": 1,
+    "nest": 1,
+    "egg": 1,
+    "container": {
+      "startup_command": "java -Xms128M -Xmx2048M -jar server.jar",
+      "image": "ghcr.io/pterodactyl/yolks:java_17",
+      "installed": 1,
+      "environment": {
+        "SERVER_JARFILE": "server.jar",
+        "VANILLA_VERSION": "latest"
+      }
+    },
+    "updated_at": "2024-03-04T00:00:00+00:00",
+    "created_at": "2024-01-01T00:00:00+00:00"
+  }
+}
+```
+</ResponseExample>
+
+## Get Server by External ID
+
+<CodeGroup>
+```bash cURL
+curl "https://panel.example.com/api/application/servers/external/{external_id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Retrieves a server by its external identifier.
+
+### Path Parameters
+
+<ParamField path="external_id" type="string" required>
+  The external identifier of the server
+</ParamField>
+
+## Create Server
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://panel.example.com/api/application/servers" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My Server",
+    "user": 1,
+    "egg": 1,
+    "docker_image": "ghcr.io/pterodactyl/yolks:java_17",
+    "startup": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}",
+    "environment": {
+      "SERVER_JARFILE": "server.jar",
+      "VANILLA_VERSION": "latest"
+    },
+    "limits": {
+      "memory": 2048,
+      "swap": 0,
+      "disk": 10240,
+      "io": 500,
+      "cpu": 100
+    },
+    "feature_limits": {
+      "databases": 1,
+      "allocations": 1,
+      "backups": 3
+    },
+    "allocation": {
+      "default": 1
+    }
+  }'
+```
+</CodeGroup>
+
+Creates a new server on the Panel.
+
+### Request Body
+
+<ParamField body="name" type="string" required>
+  Server display name
+</ParamField>
+
+<ParamField body="user" type="integer" required>
+  ID of the user who will own the server
+</ParamField>
+
+<ParamField body="egg" type="integer" required>
+  ID of the egg to use for this server
+</ParamField>
+
+<ParamField body="docker_image" type="string" required>
+  Docker image to use for the server
+</ParamField>
+
+<ParamField body="startup" type="string" required>
+  Server startup command
+</ParamField>
+
+<ParamField body="environment" type="object" required>
+  Environment variables for the server (egg-specific)
+</ParamField>
+
+<ParamField body="limits" type="object" required>
+  Resource limits for the server
+  <Expandable title="Limits Object">
+    <ParamField body="memory" type="integer" required>
+      Memory limit in MB
+    </ParamField>
+    <ParamField body="swap" type="integer" required>
+      Swap space in MB (0 to disable, -1 for unlimited)
+    </ParamField>
+    <ParamField body="disk" type="integer" required>
+      Disk space in MB
+    </ParamField>
+    <ParamField body="io" type="integer" required>
+      IO weight (10-1000)
+    </ParamField>
+    <ParamField body="cpu" type="integer" required>
+      CPU limit as percentage (0 for unlimited)
+    </ParamField>
+    <ParamField body="threads" type="string">
+      Specific CPU threads to use (e.g., "0-3" or "0,2,4")
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="feature_limits" type="object" required>
+  Feature limits for the server
+  <Expandable title="Feature Limits Object">
+    <ParamField body="databases" type="integer" required>
+      Maximum number of databases (0 for none, null for unlimited)
+    </ParamField>
+    <ParamField body="allocations" type="integer" required>
+      Maximum number of allocations (0 for none, null for unlimited)
+    </ParamField>
+    <ParamField body="backups" type="integer" required>
+      Maximum number of backups (0 for none)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="allocation" type="object">
+  Allocation settings (required if not using deployment)
+  <Expandable title="Allocation Object">
+    <ParamField body="default" type="integer" required>
+      Primary allocation ID
+    </ParamField>
+    <ParamField body="additional" type="array">
+      Array of additional allocation IDs
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="deploy" type="object">
+  Automatic deployment settings (alternative to manual allocation)
+  <Expandable title="Deploy Object">
+    <ParamField body="locations" type="array" required>
+      Array of location IDs to deploy to
+    </ParamField>
+    <ParamField body="dedicated_ip" type="boolean" required>
+      Whether to require a dedicated IP
+    </ParamField>
+    <ParamField body="port_range" type="array" required>
+      Array of port ranges (e.g., ["25565-25570"])
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="description" type="string">
+  Server description
+</ParamField>
+
+<ParamField body="external_id" type="string">
+  External identifier for third-party integrations
+</ParamField>
+
+<ParamField body="skip_scripts" type="boolean" default={false}>
+  Whether to skip the egg installation script
+</ParamField>
+
+<ParamField body="oom_disabled" type="boolean">
+  Whether to disable the OOM killer
+</ParamField>
+
+<ParamField body="start_on_completion" type="boolean" default={false}>
+  Whether to start the server after installation completes
+</ParamField>
+
+### Response
+
+Returns the created server object with HTTP status `201 Created`.
+
+## Update Server Details
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH "https://panel.example.com/api/application/servers/{server_id}/details" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Server Name",
+    "description": "Updated description"
+  }'
+```
+</CodeGroup>
+
+Updates basic server details like name, description, and owner.
+
+### Path Parameters
+
+<ParamField path="server_id" type="integer" required>
+  The internal ID of the server
+</ParamField>
+
+### Request Body
+
+<ParamField body="name" type="string">
+  New server name
+</ParamField>
+
+<ParamField body="description" type="string">
+  New server description
+</ParamField>
+
+<ParamField body="user" type="integer">
+  New owner user ID
+</ParamField>
+
+<ParamField body="external_id" type="string">
+  New external identifier
+</ParamField>
+
+## Update Server Build
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH "https://panel.example.com/api/application/servers/{server_id}/build" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "limits": {
+      "memory": 4096,
+      "swap": 0,
+      "disk": 20480,
+      "io": 500,
+      "cpu": 200
+    },
+    "feature_limits": {
+      "databases": 2,
+      "allocations": 2,
+      "backups": 5
+    }
+  }'
+```
+</CodeGroup>
+
+Updates server resource limits and allocations.
+
+### Path Parameters
+
+<ParamField path="server_id" type="integer" required>
+  The internal ID of the server
+</ParamField>
+
+### Request Body
+
+<ParamField body="allocation" type="integer">
+  Primary allocation ID
+</ParamField>
+
+<ParamField body="limits" type="object">
+  Resource limits (same structure as Create Server)
+</ParamField>
+
+<ParamField body="feature_limits" type="object">
+  Feature limits (same structure as Create Server)
+</ParamField>
+
+<ParamField body="add_allocations" type="array">
+  Array of allocation IDs to add
+</ParamField>
+
+<ParamField body="remove_allocations" type="array">
+  Array of allocation IDs to remove
+</ParamField>
+
+## Update Server Startup
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH "https://panel.example.com/api/application/servers/{server_id}/startup" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "startup": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}",
+    "environment": {
+      "SERVER_JARFILE": "server.jar",
+      "VANILLA_VERSION": "1.20.4"
+    },
+    "egg": 1,
+    "image": "ghcr.io/pterodactyl/yolks:java_17"
+  }'
+```
+</CodeGroup>
+
+Updates server startup configuration including the egg, Docker image, and environment variables.
+
+### Path Parameters
+
+<ParamField path="server_id" type="integer" required>
+  The internal ID of the server
+</ParamField>
+
+### Request Body
+
+<ParamField body="startup" type="string">
+  Server startup command
+</ParamField>
+
+<ParamField body="environment" type="object">
+  Environment variables
+</ParamField>
+
+<ParamField body="egg" type="integer">
+  Egg ID
+</ParamField>
+
+<ParamField body="image" type="string">
+  Docker image
+</ParamField>
+
+<ParamField body="skip_scripts" type="boolean">
+  Whether to skip scripts on reinstall
+</ParamField>
+
+## Suspend Server
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://panel.example.com/api/application/servers/{server_id}/suspend" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Suspends a server, preventing it from being started.
+
+### Path Parameters
+
+<ParamField path="server_id" type="integer" required>
+  The internal ID of the server
+</ParamField>
+
+## Unsuspend Server
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://panel.example.com/api/application/servers/{server_id}/unsuspend" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Unsuspends a server, allowing it to be started.
+
+### Path Parameters
+
+<ParamField path="server_id" type="integer" required>
+  The internal ID of the server
+</ParamField>
+
+## Reinstall Server
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://panel.example.com/api/application/servers/{server_id}/reinstall" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Triggers a reinstall of the server, running the egg installation script.
+
+### Path Parameters
+
+<ParamField path="server_id" type="integer" required>
+  The internal ID of the server
+</ParamField>
+
+<Warning>
+Reinstalling a server will stop it and may result in data loss. Ensure backups are created first.
+</Warning>
+
+## Delete Server
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE "https://panel.example.com/api/application/servers/{server_id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Deletes a server from the Panel.
+
+### Path Parameters
+
+<ParamField path="server_id" type="integer" required>
+  The internal ID of the server to delete
+</ParamField>
+
+### Force Delete
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE "https://panel.example.com/api/application/servers/{server_id}/force" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+</CodeGroup>
+
+Force deletes a server, bypassing daemon checks.
+
+### Response
+
+Returns HTTP status `204 No Content` on successful deletion.
+
+## Server Databases
+
+See the [Databases](/servers/databases) section for managing server databases.

@@ -1,0 +1,428 @@
+---
+title: 'Installing Wings'
+description: 'Step-by-step guide to installing Wings on your node'
+---
+
+## Prerequisites
+
+Before installing Wings, ensure you have:
+
+- A fresh Linux server (Ubuntu 20.04+, Debian 10+, or CentOS 8+)
+- Root or sudo access
+- A node created in the Pterodactyl Panel
+- The node's configuration token from the Panel
+
+<Warning>
+Wings must run on a Linux system. It cannot run on Windows or macOS in production.
+</Warning>
+
+## Supported Operating Systems
+
+| OS | Versions | Status |
+| --- | --- | --- |
+| Ubuntu | 20.04, 22.04, 24.04 | ✅ Recommended |
+| Debian | 10, 11, 12 | ✅ Recommended |
+| CentOS | 8, 9 | ✅ Supported |
+| Rocky Linux | 8, 9 | ✅ Supported |
+| AlmaLinux | 8, 9 | ✅ Supported |
+
+## Install Docker
+
+Wings requires Docker to manage game server containers.
+
+<Steps>
+  <Step title="Install Docker (Ubuntu/Debian)">
+    ```bash
+    curl -sSL https://get.docker.com/ | CHANNEL=stable bash
+    ```
+  </Step>
+  
+  <Step title="Enable Docker on boot">
+    ```bash
+    systemctl enable --now docker
+    ```
+  </Step>
+  
+  <Step title="Verify Docker installation">
+    ```bash
+    docker --version
+    ```
+    
+    You should see output like: `Docker version 24.0.7, build afdd53b`
+  </Step>
+</Steps>
+
+### Docker on CentOS/RHEL
+
+For CentOS, Rocky Linux, or AlmaLinux:
+
+```bash
+# Install required packages
+dnf install -y dnf-plugins-core
+dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+dnf install -y docker-ce docker-ce-cli containerd.io
+
+# Start and enable Docker
+systemctl enable --now docker
+```
+
+## Install Wings
+
+<Steps>
+  <Step title="Create directories">
+    ```bash
+    mkdir -p /etc/pterodactyl
+    mkdir -p /var/lib/pterodactyl
+    ```
+  </Step>
+  
+  <Step title="Download Wings binary">
+    Download the latest Wings release:
+    
+    ```bash
+    curl -L -o /usr/local/bin/wings "https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_amd64"
+    ```
+    
+    For ARM64 systems:
+    ```bash
+    curl -L -o /usr/local/bin/wings "https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_arm64"
+    ```
+  </Step>
+  
+  <Step title="Make executable">
+    ```bash
+    chmod u+x /usr/local/bin/wings
+    ```
+  </Step>
+  
+  <Step title="Verify installation">
+    ```bash
+    wings --version
+    ```
+  </Step>
+</Steps>
+
+## Configure Wings
+
+<Steps>
+  <Step title="Get configuration from Panel">
+    1. Log into your Pterodactyl Panel
+    2. Navigate to **Admin Panel** → **Nodes**
+    3. Click on your node
+    4. Click the **Configuration** tab
+    5. Copy the entire configuration JSON
+  </Step>
+  
+  <Step title="Create config file">
+    Create the configuration file:
+    
+    ```bash
+    nano /etc/pterodactyl/config.yml
+    ```
+    
+    Paste the configuration from the Panel. It should look similar to:
+    
+    ```yaml
+    debug: false
+    uuid: your-node-uuid
+    token_id: your-token-id
+    token: your-token-secret
+    
+    api:
+      host: 0.0.0.0
+      port: 8080
+      ssl:
+        enabled: true
+        cert: /etc/letsencrypt/live/node.example.com/fullchain.pem
+        key: /etc/letsencrypt/live/node.example.com/privkey.pem
+      upload_limit: 100
+    
+    system:
+      root_directory: /var/lib/pterodactyl/volumes
+      data: /var/lib/pterodactyl
+      sftp:
+        bind_port: 2022
+    
+    remote: https://panel.example.com
+    ```
+  </Step>
+  
+  <Step title="Test configuration">
+    Test that Wings can start with your configuration:
+    
+    ```bash
+    wings --debug
+    ```
+    
+    Press `Ctrl+C` to stop once you see it connect successfully.
+  </Step>
+</Steps>
+
+<Note>
+For development/testing, you can run Wings without SSL by setting `api.ssl.enabled: false`. However, SSL is required for production use.
+</Note>
+
+## Configure Swap (Optional but Recommended)
+
+Swap space helps prevent out-of-memory errors:
+
+```bash
+# Create 2GB swap file
+dd if=/dev/zero of=/swapfile bs=1M count=2048
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+
+# Make swap permanent
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+```
+
+## Setup systemd Service
+
+Create a systemd service to run Wings automatically.
+
+<Steps>
+  <Step title="Create service file">
+    ```bash
+    nano /etc/systemd/system/wings.service
+    ```
+    
+    Add the following content:
+    
+    ```ini
+    [Unit]
+    Description=Pterodactyl Wings Daemon
+    After=docker.service
+    Requires=docker.service
+    PartOf=docker.service
+    
+    [Service]
+    User=root
+    WorkingDirectory=/etc/pterodactyl
+    LimitNOFILE=4096
+    PIDFile=/var/run/wings/daemon.pid
+    ExecStart=/usr/local/bin/wings
+    Restart=on-failure
+    StartLimitInterval=180
+    StartLimitBurst=30
+    RestartSec=5s
+    
+    [Install]
+    WantedBy=multi-user.target
+    ```
+  </Step>
+  
+  <Step title="Enable and start Wings">
+    ```bash
+    # Reload systemd
+    systemctl daemon-reload
+    
+    # Enable Wings to start on boot
+    systemctl enable wings
+    
+    # Start Wings
+    systemctl start wings
+    ```
+  </Step>
+  
+  <Step title="Check status">
+    ```bash
+    systemctl status wings
+    ```
+    
+    You should see:
+    ```
+    ● wings.service - Pterodactyl Wings Daemon
+       Loaded: loaded (/etc/systemd/system/wings.service; enabled)
+       Active: active (running) since...
+    ```
+  </Step>
+</Steps>
+
+## Firewall Configuration
+
+You need to allow traffic to Wings and your game servers:
+
+### UFW (Ubuntu/Debian)
+
+```bash
+# Allow Wings API
+ufw allow 8080/tcp
+
+# Allow SFTP
+ufw allow 2022/tcp
+
+# Allow game server ports (adjust as needed)
+ufw allow 25565:25665/tcp
+ufw allow 25565:25665/udp
+
+# Enable firewall
+ufw enable
+```
+
+### FirewallD (CentOS/RHEL)
+
+```bash
+# Allow Wings API
+firewall-cmd --add-port=8080/tcp --permanent
+
+# Allow SFTP
+firewall-cmd --add-port=2022/tcp --permanent
+
+# Allow game server ports
+firewall-cmd --add-port=25565-25665/tcp --permanent
+firewall-cmd --add-port=25565-25665/udp --permanent
+
+# Reload firewall
+firewall-cmd --reload
+```
+
+## SSL/TLS Certificates
+
+Wings requires SSL certificates for secure communication with the Panel.
+
+### Using Let's Encrypt (Recommended)
+
+<Steps>
+  <Step title="Install Certbot">
+    ```bash
+    # Ubuntu/Debian
+    apt install -y certbot
+    
+    # CentOS/RHEL
+    dnf install -y certbot
+    ```
+  </Step>
+  
+  <Step title="Generate certificate">
+    ```bash
+    certbot certonly --standalone -d node.example.com
+    ```
+    
+    Replace `node.example.com` with your node's domain.
+  </Step>
+  
+  <Step title="Update Wings config">
+    Update `/etc/pterodactyl/config.yml`:
+    
+    ```yaml
+    api:
+      ssl:
+        enabled: true
+        cert: /etc/letsencrypt/live/node.example.com/fullchain.pem
+        key: /etc/letsencrypt/live/node.example.com/privkey.pem
+    ```
+  </Step>
+  
+  <Step title="Restart Wings">
+    ```bash
+    systemctl restart wings
+    ```
+  </Step>
+</Steps>
+
+### Auto-renewal
+
+Certbot automatically sets up renewal. Test it with:
+
+```bash
+certbot renew --dry-run
+```
+
+## Verify Installation
+
+Check that Wings is working correctly:
+
+```bash
+# Check Wings status
+systemctl status wings
+
+# View Wings logs
+journalctl -u wings -f
+
+# Test Wings API
+curl -k https://node.example.com:8080/api/system
+```
+
+In the Panel, your node should show as online with a green heart icon.
+
+## Building Wings from Source
+
+For development purposes, you can build Wings from source (as mentioned in BUILDING.md:60):
+
+<Steps>
+  <Step title="Install Go">
+    ```bash
+    wget https://go.dev/dl/go1.21.0.linux-amd64.tar.gz
+    tar -C /usr/local -xzf go1.21.0.linux-amd64.tar.gz
+    export PATH=$PATH:/usr/local/go/bin
+    ```
+  </Step>
+  
+  <Step title="Clone Wings repository">
+    ```bash
+    git clone https://github.com/pterodactyl/wings.git
+    cd wings
+    ```
+  </Step>
+  
+  <Step title="Build Wings">
+    ```bash
+    # For development
+    make debug
+    
+    # For production
+    make build
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Wings won't start
+
+```bash
+# Check logs
+journalctl -u wings -n 100
+
+# Verify config syntax
+wings configure --check
+
+# Test with debug mode
+wings --debug
+```
+
+### Node shows offline in Panel
+
+1. Check Wings is running: `systemctl status wings`
+2. Verify firewall allows port 8080
+3. Check SSL certificates are valid
+4. Verify `remote` URL in config matches Panel URL
+5. Check token credentials are correct
+
+### Docker permission issues
+
+```bash
+# Ensure Docker is running
+systemctl status docker
+
+# Restart Docker
+systemctl restart docker
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/wings/configuration">
+    Learn about Wings configuration options
+  </Card>
+  <Card title="Security" icon="shield" href="/wings/security">
+    Secure your Wings installation
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/wings/monitoring">
+    Monitor Wings and server performance
+  </Card>
+  <Card title="Docker Management" icon="docker" href="/wings/docker-management">
+    Understand container management
+  </Card>
+</CardGroup>

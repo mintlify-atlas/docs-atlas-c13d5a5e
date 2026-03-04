@@ -1,0 +1,477 @@
+---
+title: 'Error Responses'
+description: 'Understanding API error responses and codes'
+---
+
+Pterodactyl API returns standardized error responses to help you diagnose and handle issues in your applications.
+
+## Error Response Format
+
+All error responses follow a consistent JSON structure:
+
+```json
+{
+  "errors": [
+    {
+      "code": "ValidationException",
+      "status": "422",
+      "detail": "The given data was invalid.",
+      "meta": {
+        "rule": "required",
+        "source_field": "name"
+      }
+    }
+  ]
+}
+```
+
+**Fields**:
+
+- `code`: Machine-readable error code
+- `status`: HTTP status code as a string
+- `detail`: Human-readable error message
+- `meta`: Additional context (optional)
+
+## HTTP Status Codes
+
+### Success Codes
+
+| Code | Meaning | Description |
+|------|---------|-------------|
+| `200` | OK | Request successful, response includes data |
+| `201` | Created | Resource successfully created |
+| `204` | No Content | Request successful, no response body |
+
+### Client Error Codes
+
+| Code | Meaning | Description |
+|------|---------|-------------|
+| `400` | Bad Request | Malformed request or invalid JSON |
+| `401` | Unauthorized | Missing or invalid authentication |
+| `403` | Forbidden | Authenticated but lacks permission |
+| `404` | Not Found | Resource does not exist |
+| `405` | Method Not Allowed | HTTP method not supported for endpoint |
+| `409` | Conflict | Request conflicts with current state |
+| `422` | Unprocessable Entity | Validation error |
+| `429` | Too Many Requests | Rate limit exceeded |
+
+### Server Error Codes
+
+| Code | Meaning | Description |
+|------|---------|-------------|
+| `500` | Internal Server Error | Unexpected server error |
+| `502` | Bad Gateway | Error communicating with Wings |
+| `503` | Service Unavailable | Service temporarily unavailable |
+
+## Common Error Types
+
+### Authentication Errors
+
+#### 401 Unauthorized
+
+**Cause**: Missing or invalid API key
+
+```json
+{
+  "errors": [
+    {
+      "code": "UnauthorizedException",
+      "status": "401",
+      "detail": "Access to this endpoint must include an Authorization header."
+    }
+  ]
+}
+```
+
+**Solutions**:
+- Verify API key is included in `Authorization: Bearer {key}` header
+- Check that the API key hasn't expired
+- Ensure the key hasn't been deleted
+
+#### 403 Forbidden - IP Restriction
+
+**Cause**: Request from unauthorized IP address
+
+```json
+{
+  "errors": [
+    {
+      "code": "AccessDeniedHttpException",
+      "status": "403",
+      "detail": "This IP address (192.168.1.100) does not have permission to access the API using these credentials."
+    }
+  ]
+}
+```
+
+**Solutions**:
+- Add your IP address to the API key's allowed IPs
+- Remove IP restrictions if appropriate
+
+#### 403 Forbidden - Insufficient Permissions
+
+**Cause**: API key lacks required permissions
+
+```json
+{
+  "errors": [
+    {
+      "code": "AccessDeniedHttpException",
+      "status": "403",
+      "detail": "You do not have permission to access this resource."
+    }
+  ]
+}
+```
+
+**Solutions**:
+- Update Application API key permissions
+- Verify user has access to the server (Client API)
+
+### Validation Errors
+
+#### 422 Unprocessable Entity
+
+**Cause**: Request data failed validation
+
+```json
+{
+  "errors": [
+    {
+      "code": "ValidationException",
+      "status": "422",
+      "detail": "The name field is required.",
+      "meta": {
+        "source_field": "name",
+        "rule": "required"
+      }
+    },
+    {
+      "code": "ValidationException",
+      "status": "422",
+      "detail": "The memory must be at least 128.",
+      "meta": {
+        "source_field": "limits.memory",
+        "rule": "min"
+      }
+    }
+  ]
+}
+```
+
+**Solutions**:
+- Review the `source_field` to identify which field failed
+- Check the `rule` to understand the validation requirement
+- Correct the request data and retry
+
+### Resource Errors
+
+#### 404 Not Found
+
+**Cause**: Requested resource doesn't exist
+
+```json
+{
+  "errors": [
+    {
+      "code": "NotFoundHttpException",
+      "status": "404",
+      "detail": "The requested resource does not exist on the system."
+    }
+  ]
+}
+```
+
+**Solutions**:
+- Verify the resource ID is correct
+- Check that the resource hasn't been deleted
+- For servers, ensure you have access permissions
+
+#### 409 Conflict
+
+**Cause**: Request conflicts with current resource state
+
+```json
+{
+  "errors": [
+    {
+      "code": "ConflictHttpException",
+      "status": "409",
+      "detail": "This backup is already in a completed state."
+    }
+  ]
+}
+```
+
+**Common Conflicts**:
+- Server is being transferred
+- Server is installing
+- Backup is already running
+- Resource is locked
+
+### Rate Limiting
+
+#### 429 Too Many Requests
+
+**Cause**: Exceeded rate limit
+
+```json
+{
+  "errors": [
+    {
+      "code": "TooManyRequestsHttpException",
+      "status": "429",
+      "detail": "Too many requests"
+    }
+  ]
+}
+```
+
+**Headers**:
+```http
+Retry-After: 42
+X-RateLimit-Limit: 256
+X-RateLimit-Remaining: 0
+```
+
+**Solutions**:
+- Wait for the time specified in `Retry-After` header
+- Implement exponential backoff
+- Reduce request frequency
+- See [Rate Limiting](/api/rate-limiting) for details
+
+### Service Limits
+
+#### Service Limit Exceeded
+
+**Cause**: Reached resource limit
+
+```json
+{
+  "errors": [
+    {
+      "code": "ServiceLimitExceededException",
+      "status": "400",
+      "detail": "Schedules may not have more than 10 tasks associated with them."
+    }
+  ]
+}
+```
+
+**Common Limits**:
+- Maximum 10 tasks per schedule
+- Maximum 25 API keys per user
+- Server-specific backup limits
+- Database limits
+
+### Server State Errors
+
+#### 403 Forbidden - Server State
+
+**Cause**: Server in wrong state for operation
+
+```json
+{
+  "errors": [
+    {
+      "code": "HttpException",
+      "status": "403",
+      "detail": "This server is not currently in a state that allows for a backup to be restored."
+    }
+  ]
+}
+```
+
+**Common States**:
+- Server is installing
+- Server is transferring
+- Server is suspended
+- Server is being restored
+
+### Bad Request Errors
+
+#### 400 Bad Request - Invalid JSON
+
+**Cause**: Malformed JSON in request body
+
+```json
+{
+  "errors": [
+    {
+      "code": "BadRequestHttpException",
+      "status": "400",
+      "detail": "The JSON data passed in the request appears to be malformed: Syntax error"
+    }
+  ]
+}
+```
+
+**Solutions**:
+- Validate JSON syntax before sending
+- Ensure `Content-Type: application/json` header is set
+- Check for trailing commas or unclosed brackets
+
+#### 400 Bad Request - Missing Parameter
+
+```json
+{
+  "errors": [
+    {
+      "code": "BadRequestHttpException",
+      "status": "400",
+      "detail": "A non-empty \"size\" query parameter must be provided."
+    }
+  ]
+}
+```
+
+### Gateway Errors
+
+#### 502 Bad Gateway
+
+**Cause**: Panel cannot communicate with Wings
+
+```json
+{
+  "errors": [
+    {
+      "code": "HttpException",
+      "status": "502",
+      "detail": "Server must be online in order to send commands."
+    }
+  ]
+}
+```
+
+**Solutions**:
+- Verify Wings is running on the node
+- Check network connectivity between Panel and Wings
+- Verify Wings configuration
+- Check Wings logs for errors
+
+## Error Handling Best Practices
+
+### 1. Always Check Status Codes
+
+```python
+response = requests.get(url, headers=headers)
+
+if response.status_code == 200:
+    data = response.json()
+    # Process successful response
+elif response.status_code == 404:
+    print("Resource not found")
+elif response.status_code == 429:
+    retry_after = response.headers.get('Retry-After')
+    print(f"Rate limited. Retry after {retry_after} seconds")
+else:
+    errors = response.json().get('errors', [])
+    for error in errors:
+        print(f"Error: {error['detail']}")
+```
+
+### 2. Parse Error Details
+
+```javascript
+try {
+  const response = await fetch(url, { headers });
+  
+  if (!response.ok) {
+    const errorData = await response.json();
+    const errors = errorData.errors || [];
+    
+    errors.forEach(error => {
+      console.error(`[${error.code}] ${error.detail}`);
+      
+      if (error.meta) {
+        console.error('Field:', error.meta.source_field);
+        console.error('Rule:', error.meta.rule);
+      }
+    });
+    
+    throw new Error('API request failed');
+  }
+  
+  return await response.json();
+} catch (error) {
+  console.error('Request error:', error);
+}
+```
+
+### 3. Implement Retry Logic
+
+```python
+import time
+from requests.exceptions import RequestException
+
+def api_request_with_retry(url, headers, max_retries=3, backoff=2):
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code == 429:
+                retry_after = int(response.headers.get('Retry-After', 60))
+                time.sleep(retry_after)
+                continue
+            
+            if response.status_code >= 500:
+                # Server error, retry with exponential backoff
+                if attempt < max_retries - 1:
+                    time.sleep(backoff ** attempt)
+                    continue
+            
+            response.raise_for_status()
+            return response.json()
+            
+        except RequestException as e:
+            if attempt == max_retries - 1:
+                raise
+            time.sleep(backoff ** attempt)
+    
+    raise Exception("Max retries exceeded")
+```
+
+### 4. Handle Specific Errors
+
+```go
+type APIError struct {
+    Code   string `json:"code"`
+    Status string `json:"status"`
+    Detail string `json:"detail"`
+}
+
+func handleAPIError(statusCode int, errors []APIError) error {
+    if len(errors) == 0 {
+        return fmt.Errorf("unknown error with status %d", statusCode)
+    }
+    
+    switch errors[0].Code {
+    case "NotFoundHttpException":
+        return &ResourceNotFoundError{Detail: errors[0].Detail}
+    case "AccessDeniedHttpException":
+        return &PermissionDeniedError{Detail: errors[0].Detail}
+    case "ValidationException":
+        return &ValidationError{Errors: errors}
+    default:
+        return &GenericAPIError{StatusCode: statusCode, Errors: errors}
+    }
+}
+```
+
+## Common Troubleshooting
+
+### "Failed to validate reCAPTCHA data"
+
+This error appears when reCAPTCHA validation fails. This only affects web-based login, not API requests.
+
+### "Two-factor authentication is required"
+
+Ensure 2FA is properly set up on your account. API keys should work regardless of 2FA status.
+
+### "Server is not installed yet"
+
+Wait for server installation to complete before performing most operations.
+
+### "Wings response handling error"
+
+Check that Wings is running and accessible from the Panel. Verify TLS certificates if using HTTPS.

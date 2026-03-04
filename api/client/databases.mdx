@@ -1,0 +1,288 @@
+---
+title: Database Management
+description: Create, manage, and delete server databases
+---
+
+The database endpoints allow you to manage MySQL/MariaDB databases for your servers.
+
+## List Databases
+
+Get all databases for a server.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}/databases" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+<ParamField path="server" type="string" required>
+  The server identifier
+</ParamField>
+
+### Response
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "server_database",
+      "attributes": {
+        "id": "jvKWQqgd",
+        "host": {
+          "address": "mysql.example.com",
+          "port": 3306
+        },
+        "name": "s5_minecraft",
+        "username": "u5_xK8mN2pQ",
+        "connections_from": "%",
+        "max_connections": 0
+      }
+    }
+  ]
+}
+```
+
+<ResponseField name="id" type="string">
+  Hashed database identifier
+</ResponseField>
+
+<ResponseField name="host" type="object">
+  Database host connection details
+</ResponseField>
+
+<ResponseField name="host.address" type="string">
+  Database server hostname or IP address
+</ResponseField>
+
+<ResponseField name="host.port" type="integer">
+  Database server port
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Database name
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  Database username for authentication
+</ResponseField>
+
+<ResponseField name="connections_from" type="string">
+  IP address or wildcard (%) for allowed connections
+</ResponseField>
+
+<ResponseField name="max_connections" type="integer">
+  Maximum concurrent connections (0 = unlimited)
+</ResponseField>
+
+## Create Database
+
+Create a new database for the server.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/databases" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "database": "minecraft",
+    "remote": "%"
+  }'
+```
+
+<ParamField body="database" type="string" required>
+  Database name (will be prefixed with server identifier)
+</ParamField>
+
+<ParamField body="remote" type="string" required>
+  IP address or `%` wildcard for allowed connections
+</ParamField>
+
+### Response
+
+```json
+{
+  "object": "server_database",
+  "attributes": {
+    "id": "jvKWQqgd",
+    "host": {
+      "address": "mysql.example.com",
+      "port": 3306
+    },
+    "name": "s5_minecraft",
+    "username": "u5_xK8mN2pQ",
+    "connections_from": "%",
+    "max_connections": 0,
+    "relationships": {
+      "password": {
+        "object": "database_password",
+        "attributes": {
+          "password": "aB3$kL9mN2pQ5rT8"
+        }
+      }
+    }
+  }
+}
+```
+
+<ResponseField name="relationships.password" type="object">
+  Database password (only included on creation)
+</ResponseField>
+
+<Info>
+The database password is only returned when the database is first created. Store it securely - it cannot be retrieved again, only rotated.
+</Info>
+
+## Rotate Database Password
+
+Generate a new random password for a database.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/databases/{database}/rotate-password" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+<ParamField path="server" type="string" required>
+  The server identifier
+</ParamField>
+
+<ParamField path="database" type="string" required>
+  The database identifier (hashed ID from list)
+</ParamField>
+
+### Response
+
+```json
+{
+  "object": "server_database",
+  "attributes": {
+    "id": "jvKWQqgd",
+    "host": {
+      "address": "mysql.example.com",
+      "port": 3306
+    },
+    "name": "s5_minecraft",
+    "username": "u5_xK8mN2pQ",
+    "connections_from": "%",
+    "max_connections": 0,
+    "relationships": {
+      "password": {
+        "object": "database_password",
+        "attributes": {
+          "password": "nW7$pM4kL2qR9tY6"
+        }
+      }
+    }
+  }
+}
+```
+
+<Warning>
+Rotating the password will immediately invalidate the old password. Update your application's database configuration before rotating.
+</Warning>
+
+## Delete Database
+
+Delete a database and its user.
+
+```bash
+curl -X DELETE "https://panel.example.com/api/client/servers/{server}/databases/{database}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+<ParamField path="server" type="string" required>
+  The server identifier
+</ParamField>
+
+<ParamField path="database" type="string" required>
+  The database identifier (hashed ID from list)
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+<Warning>
+Deleting a database is permanent and cannot be undone. All data in the database will be lost.
+</Warning>
+
+## Database Limits
+
+The number of databases you can create is limited by your server's `database_limit` configuration. You can view this limit in the server details:
+
+```json
+{
+  "feature_limits": {
+    "databases": 5,
+    "allocations": 1,
+    "backups": 3
+  }
+}
+```
+
+If you've reached the limit, you'll receive an error when attempting to create a new database:
+
+```json
+{
+  "errors": [
+    {
+      "code": "TooManyDatabasesException",
+      "status": "400",
+      "detail": "This server has reached its limit of 5 databases."
+    }
+  ]
+}
+```
+
+## Connection Examples
+
+### Using MySQL Command Line
+
+```bash
+mysql -h mysql.example.com -P 3306 -u u5_xK8mN2pQ -p s5_minecraft
+```
+
+### Using Connection String
+
+```
+mysql://u5_xK8mN2pQ:password@mysql.example.com:3306/s5_minecraft
+```
+
+### PHP PDO Example
+
+```php
+$dsn = "mysql:host=mysql.example.com;port=3306;dbname=s5_minecraft";
+$username = "u5_xK8mN2pQ";
+$password = "aB3$kL9mN2pQ5rT8";
+
+try {
+    $pdo = new PDO($dsn, $username, $password);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (PDOException $e) {
+    echo "Connection failed: " . $e->getMessage();
+}
+```
+
+### Node.js Example
+
+```javascript
+const mysql = require('mysql2');
+
+const connection = mysql.createConnection({
+  host: 'mysql.example.com',
+  port: 3306,
+  user: 'u5_xK8mN2pQ',
+  password: 'aB3$kL9mN2pQ5rT8',
+  database: 's5_minecraft'
+});
+
+connection.connect((err) => {
+  if (err) {
+    console.error('Error connecting:', err);
+    return;
+  }
+  console.log('Connected to database');
+});
+```

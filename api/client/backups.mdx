@@ -1,0 +1,368 @@
+---
+title: Backup Management
+description: Create, download, restore, and manage server backups
+---
+
+The backup endpoints allow you to create and manage server backups, including downloading and restoring them.
+
+## List Backups
+
+Get all backups for a server.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}/backups" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+<ParamField path="server" type="string" required>
+  The server identifier
+</ParamField>
+
+<ParamField query="per_page" type="integer">
+  Results per page (max 50, default 20)
+</ParamField>
+
+### Response
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "backup",
+      "attributes": {
+        "uuid": "a1b2c3d4-e5f6-4a5b-8c7d-1e2f3a4b5c6d",
+        "name": "Backup 2024-01-15",
+        "ignored_files": [],
+        "sha256_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 524288000,
+        "created_at": "2024-01-15T10:30:00+00:00",
+        "completed_at": "2024-01-15T10:35:23+00:00",
+        "is_successful": true,
+        "is_locked": false,
+        "checksum_type": "sha256"
+      }
+    }
+  ],
+  "meta": {
+    "backup_count": 3,
+    "pagination": {
+      "total": 5,
+      "count": 5,
+      "per_page": 20,
+      "current_page": 1,
+      "total_pages": 1
+    }
+  }
+}
+```
+
+<ResponseField name="uuid" type="string">
+  Unique backup identifier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Backup name/description
+</ResponseField>
+
+<ResponseField name="ignored_files" type="array">
+  File patterns that were excluded from the backup
+</ResponseField>
+
+<ResponseField name="sha256_hash" type="string">
+  SHA256 checksum of the backup file
+</ResponseField>
+
+<ResponseField name="bytes" type="integer">
+  Backup size in bytes
+</ResponseField>
+
+<ResponseField name="is_successful" type="boolean">
+  Whether the backup completed successfully
+</ResponseField>
+
+<ResponseField name="is_locked" type="boolean">
+  Whether the backup is locked (prevents deletion)
+</ResponseField>
+
+<ResponseField name="completed_at" type="string|null">
+  ISO 8601 timestamp when backup finished (null if in progress)
+</ResponseField>
+
+## Get Backup Details
+
+Retrieve information about a specific backup.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}/backups/{backup}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+<ParamField path="backup" type="string" required>
+  The backup UUID
+</ParamField>
+
+## Create Backup
+
+Create a new backup of the server.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/backups" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Pre-update Backup",
+    "is_locked": false,
+    "ignored": "*.log\nnode_modules/*\n.git/*"
+  }'
+```
+
+<ParamField body="name" type="string">
+  Optional backup name (defaults to timestamp)
+</ParamField>
+
+<ParamField body="is_locked" type="boolean">
+  Lock backup to prevent deletion (default: false). Requires backup deletion permission.
+</ParamField>
+
+<ParamField body="ignored" type="string">
+  Newline-separated list of file patterns to exclude from backup
+</ParamField>
+
+### Ignore Patterns
+
+File patterns follow standard glob syntax:
+- `*.log` - All log files
+- `cache/*` - Everything in cache directory
+- `temp/*.tmp` - Temporary files in temp directory
+- `.git/*` - Git repository data
+
+### Response
+
+Returns the created backup object (same format as list response).
+
+<Info>
+Backup creation is asynchronous. The backup will show `completed_at: null` until it finishes. Poll the backup details endpoint to check completion status.
+</Info>
+
+## Download Backup
+
+Generate a signed URL to download a backup.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}/backups/{backup}/download" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+### Response
+
+```json
+{
+  "object": "signed_url",
+  "attributes": {
+    "url": "https://s3.amazonaws.com/bucket/backup.tar.gz?X-Amz-Algorithm=..."
+  }
+}
+```
+
+<ResponseField name="url" type="string">
+  Signed download URL (valid for 15 minutes for S3, longer for local storage)
+</ResponseField>
+
+<Info>
+The URL varies based on backup storage:
+- **S3/Compatible**: Pre-signed S3 URL
+- **Local (Wings)**: Direct download through Wings daemon
+</Info>
+
+## Lock/Unlock Backup
+
+Toggle the lock status of a backup. Locked backups cannot be deleted.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/backups/{backup}/lock" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+### Response
+
+Returns the updated backup object with the new `is_locked` value.
+
+<Warning>
+Locking/unlocking backups requires the backup deletion permission.
+</Warning>
+
+## Restore Backup
+
+Restore a server from a backup.
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/backups/{backup}/restore" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "truncate": false
+  }'
+```
+
+<ParamField body="truncate" type="boolean">
+  Whether to delete all existing files before restoring (default: false)
+</ParamField>
+
+### Response
+
+Returns `204 No Content` when restore begins.
+
+<Warning>
+**Important Notes:**
+- Server must be stopped before restoring
+- Server status will be set to `restoring_backup` during the process
+- If `truncate: true`, **all existing files will be deleted** before extracting the backup
+- If `truncate: false`, backup files will overwrite existing files with the same name
+- Restore process cannot be cancelled once started
+</Warning>
+
+### Monitoring Restore Progress
+
+Check the server status to monitor restore progress:
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+When `status` changes from `restoring_backup` to `null`, the restore is complete.
+
+## Delete Backup
+
+Delete a backup.
+
+```bash
+curl -X DELETE "https://panel.example.com/api/client/servers/{server}/backups/{backup}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+### Response
+
+Returns `204 No Content` on success.
+
+<Warning>
+Deleting a backup is permanent and cannot be undone. Locked backups cannot be deleted until they are unlocked.
+</Warning>
+
+## Backup Limits
+
+The number of backups you can create is limited by your server's `backup_limit` configuration:
+
+```json
+{
+  "feature_limits": {
+    "databases": 5,
+    "allocations": 1,
+    "backups": 3
+  }
+}
+```
+
+If you've reached the limit, you must delete an existing backup before creating a new one.
+
+## Backup Storage Types
+
+Pterodactyl supports multiple backup storage backends:
+
+### Local (Wings)
+
+Backups stored on the Wings daemon server.
+
+**Pros:**
+- Fast backup and restore
+- No external dependencies
+- No additional cost
+
+**Cons:**
+- Limited by node disk space
+- Not redundant (lost if node fails)
+- Download speeds limited by node bandwidth
+
+### AWS S3
+
+Backups stored in Amazon S3 or S3-compatible storage (MinIO, Backblaze B2, Wasabi, etc.).
+
+**Pros:**
+- Highly redundant and durable
+- Scalable storage
+- Fast global downloads
+
+**Cons:**
+- Storage and bandwidth costs
+- Slightly slower initial backup upload
+- Requires S3 configuration
+
+## Best Practices
+
+### Regular Backups
+
+Create automated backup schedules:
+
+```bash
+# Create a schedule for daily backups at 3 AM
+curl -X POST "https://panel.example.com/api/client/servers/{server}/schedules" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Daily Backup",
+    "minute": "0",
+    "hour": "3",
+    "day_of_month": "*",
+    "month": "*",
+    "day_of_week": "*",
+    "is_active": true,
+    "only_when_online": false
+  }'
+
+# Add backup task to the schedule
+curl -X POST "https://panel.example.com/api/client/servers/{server}/schedules/{schedule}/tasks" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "backup",
+    "payload": "",
+    "time_offset": 0
+  }'
+```
+
+### Pre-Update Backups
+
+Always create a locked backup before major updates:
+
+```bash
+curl -X POST "https://panel.example.com/api/client/servers/{server}/backups" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Pre-1.20-Update",
+    "is_locked": true
+  }'
+```
+
+### Exclude Unnecessary Files
+
+Reduce backup size and time by excluding logs, cache, and temporary files:
+
+```
+*.log
+logs/*
+cache/*
+temp/*
+*.tmp
+.git/*
+node_modules/*
+```

@@ -1,0 +1,400 @@
+---
+title: Startup Configuration
+description: View and modify server startup variables
+---
+
+Startup variables control how your server starts, including game versions, memory limits, and application-specific settings.
+
+## Get Startup Variables
+
+Retrieve all startup variables for a server.
+
+```bash
+curl -X GET "https://panel.example.com/api/client/servers/{server}/startup" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json"
+```
+
+<ParamField path="server" type="string" required>
+  The server identifier
+</ParamField>
+
+### Response
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "egg_variable",
+      "attributes": {
+        "name": "Server Version",
+        "description": "The version of Minecraft to install. Use 'latest' for the latest version.",
+        "env_variable": "MINECRAFT_VERSION",
+        "default_value": "latest",
+        "server_value": "1.20.4",
+        "is_editable": true,
+        "rules": "required|string|max:20"
+      }
+    },
+    {
+      "object": "egg_variable",
+      "attributes": {
+        "name": "Server Type",
+        "description": "The type of server to install (vanilla, paper, forge, etc.)",
+        "env_variable": "SERVER_TYPE",
+        "default_value": "paper",
+        "server_value": "paper",
+        "is_editable": true,
+        "rules": "required|string|in:vanilla,paper,purpur,forge,fabric"
+      }
+    },
+    {
+      "object": "egg_variable",
+      "attributes": {
+        "name": "Build Number",
+        "description": "The build number for Paper servers. Use 'latest' for the newest build.",
+        "env_variable": "BUILD_NUMBER",
+        "default_value": "latest",
+        "server_value": "latest",
+        "is_editable": true,
+        "rules": "required|string"
+      }
+    }
+  ],
+  "meta": {
+    "startup_command": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}",
+    "raw_startup_command": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}",
+    "docker_images": {
+      "Java 17": "ghcr.io/pterodactyl/yolks:java_17",
+      "Java 21": "ghcr.io/pterodactyl/yolks:java_21",
+      "Java 8": "ghcr.io/pterodactyl/yolks:java_8"
+    }
+  }
+}
+```
+
+<ResponseField name="name" type="string">
+  Human-readable variable name
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Description of what the variable controls
+</ResponseField>
+
+<ResponseField name="env_variable" type="string">
+  Environment variable name (used for updates)
+</ResponseField>
+
+<ResponseField name="default_value" type="string">
+  Default value from the egg configuration
+</ResponseField>
+
+<ResponseField name="server_value" type="string">
+  Current value set for this server
+</ResponseField>
+
+<ResponseField name="is_editable" type="boolean">
+  Whether users can modify this variable
+</ResponseField>
+
+<ResponseField name="rules" type="string">
+  Laravel validation rules for the variable
+</ResponseField>
+
+### Metadata Fields
+
+<ResponseField name="meta.startup_command" type="string">
+  The startup command with variables replaced with actual values
+</ResponseField>
+
+<ResponseField name="meta.raw_startup_command" type="string">
+  The raw startup command template with variable placeholders
+</ResponseField>
+
+<ResponseField name="meta.docker_images" type="object">
+  Available Docker images for the server (read-only via client API)
+</ResponseField>
+
+## Update Startup Variable
+
+Update a single startup variable.
+
+```bash
+curl -X PUT "https://panel.example.com/api/client/servers/{server}/startup/variable" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "MINECRAFT_VERSION",
+    "value": "1.20.4"
+  }'
+```
+
+<ParamField body="key" type="string" required>
+  The environment variable name (e.g., `MINECRAFT_VERSION`)
+</ParamField>
+
+<ParamField body="value" type="string" required>
+  The new value for the variable
+</ParamField>
+
+### Response
+
+```json
+{
+  "object": "egg_variable",
+  "attributes": {
+    "name": "Server Version",
+    "description": "The version of Minecraft to install. Use 'latest' for the latest version.",
+    "env_variable": "MINECRAFT_VERSION",
+    "default_value": "latest",
+    "server_value": "1.20.4",
+    "is_editable": true,
+    "rules": "required|string|max:20"
+  },
+  "meta": {
+    "startup_command": "java -Xms128M -Xmx2048M -jar server.jar",
+    "raw_startup_command": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}"
+  }
+}
+```
+
+<Info>
+The updated startup command is returned in the metadata. Most variable changes require a server restart to take effect.
+</Info>
+
+## Variable Validation
+
+Variables are validated according to their `rules` field. Common validation rules:
+
+- `required` - Value cannot be empty
+- `string` - Must be a string
+- `integer` - Must be an integer
+- `boolean` - Must be true/false or 1/0
+- `in:value1,value2` - Must be one of the listed values
+- `max:n` - Maximum length or value
+- `min:n` - Minimum length or value
+- `regex:pattern` - Must match regex pattern
+
+### Validation Examples
+
+```bash
+# Valid: Version number
+curl -X PUT "https://panel.example.com/api/client/servers/{server}/startup/variable" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "MINECRAFT_VERSION",
+    "value": "1.20.4"
+  }'
+
+# Valid: Latest version
+curl -X PUT "https://panel.example.com/api/client/servers/{server}/startup/variable" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "MINECRAFT_VERSION",
+    "value": "latest"
+  }'
+
+# Invalid: Empty value (if required)
+curl -X PUT "https://panel.example.com/api/client/servers/{server}/startup/variable" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "MINECRAFT_VERSION",
+    "value": ""
+  }'
+# Error: The value field is required.
+```
+
+## Read-Only Variables
+
+Some variables are marked as `is_editable: false`. These cannot be modified through the client API:
+
+```json
+{
+  "object": "egg_variable",
+  "attributes": {
+    "name": "Server Memory",
+    "env_variable": "SERVER_MEMORY",
+    "server_value": "2048",
+    "is_editable": false
+  }
+}
+```
+
+Attempting to update a read-only variable will result in an error:
+
+```json
+{
+  "errors": [
+    {
+      "code": "BadRequestHttpException",
+      "status": "400",
+      "detail": "The environment variable you are trying to edit is read-only."
+    }
+  ]
+}
+```
+
+## Common Variables by Game
+
+### Minecraft (Java Edition)
+
+```bash
+# Server version
+"MINECRAFT_VERSION": "1.20.4"         # or "latest"
+
+# Server type
+"SERVER_TYPE": "paper"                # vanilla, paper, purpur, forge, fabric, spigot
+
+# Build number (for Paper/Purpur)
+"BUILD_NUMBER": "latest"              # or specific build number
+
+# Server JAR file
+"SERVER_JARFILE": "server.jar"
+```
+
+### Minecraft (Bedrock Edition)
+
+```bash
+# Server version
+"BEDROCK_VERSION": "latest"           # or specific version like "1.20.50"
+
+# Server name
+"SERVER_NAME": "My Bedrock Server"
+
+# Gamemode
+"GAMEMODE": "survival"                # survival, creative, adventure
+
+# Difficulty  
+"DIFFICULTY": "normal"                # peaceful, easy, normal, hard
+```
+
+### Rust
+
+```bash
+# Server name
+"SERVER_NAME": "My Rust Server"
+
+# Max players
+"MAX_PLAYERS": "100"
+
+# World size
+"WORLD_SIZE": "3000"                  # Map size in meters
+
+# World seed
+"WORLD_SEED": "12345"                 # Procedural generation seed
+
+# RCON password
+"RCON_PASSWORD": "changeme"
+```
+
+### Valheim
+
+```bash
+# Server name
+"SERVER_NAME": "My Valheim Server"
+
+# World name
+"WORLD_NAME": "Dedicated"
+
+# Password
+"SERVER_PASSWORD": "secret123"
+
+# Public server
+"PUBLIC_SERVER": "1"                  # 0 = private, 1 = public
+```
+
+### Counter-Strike 2
+
+```bash
+# Server name
+"SERVER_NAME": "My CS2 Server"
+
+# Game mode
+"GAME_MODE": "0"                      # 0=casual, 1=competitive
+
+# Map group
+"MAP_GROUP": "mg_active"              # Map rotation group
+
+# Start map  
+"START_MAP": "de_dust2"
+
+# RCON password
+"RCON_PASSWORD": "changeme"
+```
+
+## Startup Command Variables
+
+Variables are used in the startup command template:
+
+```bash
+# Template
+java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}
+
+# After substitution (with SERVER_MEMORY=2048, SERVER_JARFILE=server.jar)
+java -Xms128M -Xmx2048M -jar server.jar
+```
+
+Common template variables:
+- `{{SERVER_MEMORY}}` - Memory limit in MB
+- `{{SERVER_PORT}}` - Primary server port  
+- `{{SERVER_IP}}` - Server IP address
+- Any custom egg variable (e.g., `{{MINECRAFT_VERSION}}`)
+
+## Best Practices
+
+### Update Variables Before Installation
+
+For new servers, update variables before first start:
+
+```bash
+# Set Minecraft version
+curl -X PUT "https://panel.example.com/api/client/servers/{server}/startup/variable" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"key": "MINECRAFT_VERSION", "value": "1.20.4"}'
+
+# Set server type
+curl -X PUT "https://panel.example.com/api/client/servers/{server}/startup/variable" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"key": "SERVER_TYPE", "value": "paper"}'
+
+# Start server
+curl -X POST "https://panel.example.com/api/client/servers/{server}/power" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"signal": "start"}'
+```
+
+### Restart After Changes
+
+Most variable changes require a server restart:
+
+```bash
+# Update variable
+curl -X PUT "https://panel.example.com/api/client/servers/{server}/startup/variable" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"key": "MINECRAFT_VERSION", "value": "1.20.6"}'
+
+# Restart server to apply changes
+curl -X POST "https://panel.example.com/api/client/servers/{server}/power" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"signal": "restart"}'
+```
+
+### Validate Before Updating
+
+Check the current value and rules before updating:
+
+```bash
+# Get all variables
+curl -X GET "https://panel.example.com/api/client/servers/{server}/startup" \
+  -H "Authorization: Bearer YOUR_API_KEY" | jq '.data[] | select(.attributes.env_variable == "MINECRAFT_VERSION")'
+```

@@ -1,0 +1,441 @@
+---
+title: 'System Requirements'
+description: 'Hardware and software requirements for running Pterodactyl Panel'
+---
+
+# System Requirements
+
+Before installing Pterodactyl Panel, ensure your server meets the minimum requirements for both the Panel and Wings daemon. This guide covers all necessary dependencies and recommended configurations.
+
+## Panel Requirements
+
+The Panel is the web interface and management system. It can be installed on a separate server from your game servers.
+
+### Operating System
+
+<CardGroup cols={2}>
+  <Card title="Supported" icon="check">
+    - Ubuntu 20.04, 22.04, 24.04
+    - Debian 11, 12
+    - CentOS 8, 9 Stream
+    - Rocky Linux 8, 9
+    - AlmaLinux 8, 9
+  </Card>
+  <Card title="Not Supported" icon="xmark">
+    - Windows Server
+    - Shared hosting
+    - OpenVZ/LXC containers (without Docker support)
+    - 32-bit operating systems
+  </Card>
+</CardGroup>
+
+<Warning>
+Pterodactyl **does not** run on Windows. You must use a Linux-based operating system.
+</Warning>
+
+### PHP Requirements
+
+Pterodactyl requires **PHP 8.2 or PHP 8.3**. Older versions are not supported.
+
+#### Required PHP Extensions
+
+The following PHP extensions are required:
+
+- `cli`
+- `openssl`
+- `gd`
+- `mysql` (or `pdo_mysql`)
+- `pdo`
+- `mbstring`
+- `tokenizer`
+- `bcmath`
+- `xml` or `dom`
+- `curl`
+- `zip`
+- `fpm` (if using NGINX)
+- `json`
+- `posix`
+
+<Note>
+Most Linux distributions include these extensions by default when installing PHP from official repositories.
+</Note>
+
+#### Installing PHP 8.2
+
+<CodeGroup>
+```bash Ubuntu/Debian
+# Add PHP repository
+apt -y install software-properties-common curl apt-transport-https ca-certificates gnupg
+LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php
+apt update
+
+# Install PHP 8.2 and required extensions
+apt -y install php8.2 php8.2-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip}
+```
+
+```bash CentOS/RHEL/Rocky/Alma
+# Add REMI repository
+dnf install -y dnf-utils http://rpms.remirepo.net/enterprise/remi-release-$(rpm -E %rhel).rpm
+dnf module reset php -y
+dnf module enable php:remi-8.2 -y
+
+# Install PHP 8.2 and required extensions
+dnf install -y php php-{common,fpm,cli,json,mysqlnd,mcrypt,gd,mbstring,pdo,zip,bcmath,dom,opcache,posix}
+```
+</CodeGroup>
+
+### Database Requirements
+
+<Tabs>
+  <Tab title="MySQL">
+    **Minimum Version**: MySQL 5.7.22 or higher
+    
+    **Recommended**: MySQL 8.0+
+    
+    MySQL is the recommended database for Pterodactyl.
+  </Tab>
+  <Tab title="MariaDB">
+    **Minimum Version**: MariaDB 10.2 or higher
+    
+    **Recommended**: MariaDB 10.6+
+    
+    MariaDB is fully supported and often preferred for its performance.
+  </Tab>
+</Tabs>
+
+<Warning>
+Do **not** use the `root` MySQL user for the Panel. Create a dedicated database user with appropriate permissions.
+</Warning>
+
+### Web Server Requirements
+
+You need a web server to serve the Panel. Both NGINX and Apache are supported.
+
+<Tabs>
+  <Tab title="NGINX (Recommended)">
+    - NGINX 1.18 or newer
+    - PHP-FPM configured and running
+    - Support for URL rewrites
+  </Tab>
+  <Tab title="Apache">
+    - Apache 2.4 or newer
+    - `mod_rewrite` enabled
+    - `.htaccess` support enabled
+  </Tab>
+</Tabs>
+
+### Additional Software
+
+#### Composer
+
+**Required Version**: Composer 2.x
+
+Composer is required to install PHP dependencies.
+
+```bash
+curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+```
+
+#### Redis
+
+**Recommended Version**: Redis 6.x or newer
+
+Redis is used for caching and queue management.
+
+```bash Ubuntu/Debian
+apt install -y redis-server
+systemctl enable --now redis-server
+```
+
+<Note>
+While Redis is optional, it is **highly recommended** for production environments to improve performance.
+</Note>
+
+### SSL Certificate
+
+<Tip>
+Always use HTTPS in production. Let's Encrypt provides free SSL certificates.
+</Tip>
+
+- SSL certificate (Let's Encrypt recommended)
+- Valid domain name pointing to your server
+- Port 80 and 443 accessible
+
+## Wings Requirements
+
+Wings is the server control daemon that manages Docker containers. It must be installed on every machine where you want to run game servers.
+
+### Operating System
+
+<CardGroup cols={2}>
+  <Card title="Supported" icon="check">
+    - Ubuntu 20.04, 22.04, 24.04
+    - Debian 11, 12
+    - CentOS 8, 9 Stream
+    - Rocky Linux 8, 9
+    - AlmaLinux 8, 9
+  </Card>
+  <Card title="Required Kernel" icon="linux">
+    - Linux Kernel 5.10 or newer
+    - Kernel headers installed
+    - Docker support enabled
+  </Card>
+</CardGroup>
+
+<Warning>
+Wings **requires** Docker and will **not** work on OpenVZ or other container systems that don't support Docker.
+</Warning>
+
+### Docker Requirements
+
+**Required Version**: Docker 20.10.0 or newer (Docker 24+ recommended)
+
+Docker is the container runtime used to isolate game servers.
+
+#### Installing Docker
+
+<CodeGroup>
+```bash Ubuntu/Debian
+curl -sSL https://get.docker.com/ | CHANNEL=stable bash
+systemctl enable --now docker
+```
+
+```bash CentOS/RHEL/Rocky/Alma
+curl -sSL https://get.docker.com/ | CHANNEL=stable bash
+systemctl enable --now docker
+```
+</CodeGroup>
+
+#### Docker Configuration
+
+- Docker daemon running on startup
+- User permissions configured (if needed)
+- Storage driver: `overlay2` (recommended)
+- IPv4 forwarding enabled in kernel
+
+### Firewall Configuration
+
+<Steps>
+  <Step title="Allow Panel Communication">
+    Wings communicates with the Panel on port **8080** (configurable)
+  </Step>
+  <Step title="Allow SFTP Access">
+    SFTP server runs on port **2022** by default
+  </Step>
+  <Step title="Allow Game Server Ports">
+    Open the port range allocated for game servers (e.g., 25565-25665)
+  </Step>
+</Steps>
+
+#### Example Firewall Rules (UFW)
+
+```bash
+# Allow SSH
+ufw allow 22/tcp
+
+# Allow Wings communication with Panel
+ufw allow 8080/tcp
+
+# Allow SFTP
+ufw allow 2022/tcp
+
+# Allow game server ports (example range)
+ufw allow 25565:25665/tcp
+ufw allow 25565:25665/udp
+
+# Enable firewall
+ufw enable
+```
+
+### Network Requirements
+
+- Static IP address or dynamic DNS
+- Adequate bandwidth for game servers
+- Low latency connection to Panel (if separate servers)
+- No NAT restrictions for allocated ports
+- Reverse DNS (rDNS) recommended but not required
+
+## Hardware Requirements
+
+### Panel Hardware
+
+The Panel has minimal resource requirements:
+
+<CardGroup cols={3}>
+  <Card title="CPU" icon="microchip">
+    **Minimum**: 1 core
+    
+    **Recommended**: 2+ cores
+  </Card>
+  <Card title="RAM" icon="memory">
+    **Minimum**: 1 GB
+    
+    **Recommended**: 2 GB+
+  </Card>
+  <Card title="Storage" icon="hard-drive">
+    **Minimum**: 5 GB
+    
+    **Recommended**: 10 GB+
+  </Card>
+</CardGroup>
+
+<Note>
+Panel resource usage scales with the number of users and servers. Large installations may require more resources.
+</Note>
+
+### Wings Hardware
+
+Wings resource requirements depend entirely on the game servers you run:
+
+<CardGroup cols={3}>
+  <Card title="CPU" icon="microchip">
+    **Minimum**: 2 cores
+    
+    **Recommended**: 4+ cores
+    
+    Varies by game server load
+  </Card>
+  <Card title="RAM" icon="memory">
+    **Minimum**: 2 GB + game server needs
+    
+    **Recommended**: 4 GB + game server allocation
+  </Card>
+  <Card title="Storage" icon="hard-drive">
+    **Minimum**: 20 GB
+    
+    **Recommended**: 50 GB+ SSD
+    
+    Depends on number and size of servers
+  </Card>
+</CardGroup>
+
+<Tip>
+**Storage Recommendation**: Use SSD storage for Wings nodes to improve game server performance, especially for I/O-intensive games like Minecraft.
+</Tip>
+
+### Example Configurations
+
+<Tabs>
+  <Tab title="Small (1-5 servers)">
+    - **CPU**: 2-4 cores
+    - **RAM**: 4-8 GB
+    - **Storage**: 50 GB SSD
+    - **Network**: 100 Mbps
+    
+    Suitable for personal use or small communities.
+  </Tab>
+  <Tab title="Medium (5-20 servers)">
+    - **CPU**: 4-8 cores
+    - **RAM**: 16-32 GB
+    - **Storage**: 100-250 GB SSD
+    - **Network**: 1 Gbps
+    
+    Good for small hosting businesses or large communities.
+  </Tab>
+  <Tab title="Large (20+ servers)">
+    - **CPU**: 8+ cores (or multiple nodes)
+    - **RAM**: 32+ GB per node
+    - **Storage**: 250+ GB SSD per node
+    - **Network**: 1+ Gbps per node
+    
+    Enterprise-grade hosting with multiple Wings nodes.
+  </Tab>
+</Tabs>
+
+## Recommended Setup
+
+### Production Environment
+
+<Steps>
+  <Step title="Separate Panel and Wings">
+    Run the Panel on one server and Wings on separate game server nodes
+  </Step>
+  <Step title="Use Redis">
+    Install Redis for caching and queue performance
+  </Step>
+  <Step title="Enable SSL">
+    Use Let's Encrypt for free SSL certificates
+  </Step>
+  <Step title="Configure Backups">
+    Set up S3 or local backup storage
+  </Step>
+  <Step title="Monitor Resources">
+    Use monitoring tools to track server health
+  </Step>
+</Steps>
+
+### Development Environment
+
+For local development and testing:
+
+- **Node.js**: v22 or newer (for asset building)
+- **Yarn**: v1.x.x (package manager)
+- **Go**: 1.17.x or newer (for Wings development)
+
+<Note>
+Development requirements are only needed if you plan to modify the Panel's React frontend or Wings daemon. Pre-built releases include compiled assets.
+</Note>
+
+## Compatibility Notes
+
+### Cloud Providers
+
+Pterodactyl works on all major cloud providers:
+
+- AWS (EC2)
+- Google Cloud Platform (GCE)
+- Microsoft Azure
+- DigitalOcean
+- Vultr
+- Linode/Akamai
+- OVH
+- Hetzner
+
+<Warning>
+**Oracle Cloud Free Tier**: Some users report issues with Docker on Oracle Cloud's ARM instances. Use x86_64 instances for best compatibility.
+</Warning>
+
+### Virtualization
+
+<Tabs>
+  <Tab title="Supported">
+    - KVM
+    - VMware
+    - Xen HVM
+    - Hyper-V
+    - Proxmox (KVM-based)
+  </Tab>
+  <Tab title="Not Supported">
+    - OpenVZ
+    - LXC (without Docker support)
+    - Virtuozzo
+  </Tab>
+</Tabs>
+
+### IPv6 Support
+
+Pterodactyl fully supports IPv6:
+- IPv6 allocations for game servers
+- Dual-stack (IPv4 + IPv6) configurations
+- IPv6-only setups (with proper configuration)
+
+## Quick Checklist
+
+Before proceeding to installation, verify:
+
+- [ ] Linux server with kernel 5.10+
+- [ ] PHP 8.2 or 8.3 with required extensions
+- [ ] MySQL 8.0+ or MariaDB 10.6+
+- [ ] Web server (NGINX or Apache)
+- [ ] Composer 2.x installed
+- [ ] Redis installed and running
+- [ ] Docker installed (for Wings)
+- [ ] Domain name with DNS configured
+- [ ] Firewall rules configured
+- [ ] Adequate CPU, RAM, and storage
+
+## Next Steps
+
+<Card title="Installation Guide" icon="download" href="/installation">
+  Ready to install? Follow our comprehensive installation guide to get Pterodactyl up and running.
+</Card>

@@ -1,0 +1,189 @@
+---
+title: 'Wings Overview'
+description: 'Understanding the Wings server control daemon and its architecture'
+---
+
+## What is Wings?
+
+Wings is Pterodactyl's server control daemon written in Go. It runs on each game server node and is responsible for:
+
+- Managing Docker containers for game servers
+- Handling server power actions (start, stop, restart)
+- Processing file operations via SFTP
+- Streaming console output via WebSockets
+- Monitoring server resource usage
+- Executing server installations and transfers
+- Managing backups and restores
+
+## Architecture
+
+Wings operates as a standalone daemon that communicates with the Pterodactyl Panel through a REST API. Each node in your infrastructure runs its own Wings instance.
+
+```
+┌─────────────────┐
+│ Pterodactyl     │
+│ Panel (PHP)     │
+└────────┬────────┘
+         │ HTTPS API
+         │
+    ┌────┴────────────────┐
+    │                     │
+┌───▼────┐           ┌────▼───┐
+│ Wings  │           │ Wings  │
+│ Node 1 │           │ Node 2 │
+└───┬────┘           └────┬───┘
+    │                     │
+┌───▼────────┐     ┌──────▼────┐
+│  Docker    │     │  Docker   │
+│ Containers │     │ Containers│
+└────────────┘     └───────────┘
+```
+
+## How Wings Works
+
+### Container Management
+
+Wings uses Docker to isolate each game server in its own container. This provides:
+
+- **Resource limits**: Memory, CPU, and disk quotas per server
+- **Security isolation**: Servers cannot interfere with each other
+- **Clean environment**: Each server gets a fresh filesystem
+- **Easy cleanup**: Removing a server is as simple as deleting a container
+
+### Panel Communication
+
+Wings exposes a REST API that the Panel uses to manage servers. Key endpoints include:
+
+<CodeGroup>
+```bash Server Details
+# Panel requests server configuration from Wings
+GET /api/servers/{uuid}
+```
+
+```bash Server List
+# Panel requests all servers on a node
+GET /api/servers?per_page=50
+```
+
+```bash Installation Data
+# Wings requests installation script details
+GET /api/servers/{uuid}/install
+```
+</CodeGroup>
+
+Relevant Panel API routes for Wings communication:
+
+- `POST /api/remote/sftp/auth` - SFTP authentication (routes/api-remote.php:7)
+- `GET /api/remote/servers` - List all servers on node (routes/api-remote.php:9)
+- `GET /api/remote/servers/{uuid}` - Get server details (routes/api-remote.php:14)
+- `GET /api/remote/servers/{uuid}/install` - Get installation script (routes/api-remote.php:15)
+- `POST /api/remote/activity` - Submit activity logs (routes/api-remote.php:11)
+
+### Server Configuration
+
+When Wings needs server configuration, the Panel responds with a structure from `ServerConfigurationStructureService` (app/Services/Servers/ServerConfigurationStructureService.php:23):
+
+```json
+{
+  "uuid": "server-uuid",
+  "meta": {
+    "name": "My Game Server",
+    "description": "Server description"
+  },
+  "suspended": false,
+  "environment": {
+    "SERVER_MEMORY": "2048",
+    "SERVER_PORT": "25565"
+  },
+  "invocation": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar server.jar",
+  "build": {
+    "memory_limit": 2048,
+    "swap": 0,
+    "cpu_limit": 200,
+    "disk_space": 10240
+  },
+  "allocations": {
+    "default": {
+      "ip": "0.0.0.0",
+      "port": 25565
+    }
+  }
+}
+```
+
+### SFTP Authentication
+
+Wings handles SFTP authentication by calling the Panel's authentication endpoint (app/Http/Controllers/Api/Remote/SftpAuthenticationController.php:34):
+
+1. User connects via SFTP with format: `username.serverid@host`
+2. Wings sends credentials to Panel at `POST /api/remote/sftp/auth`
+3. Panel validates credentials (password or public key)
+4. Panel returns user permissions if valid
+5. Wings grants or denies SFTP access
+
+### Activity Logging
+
+Wings sends server activity events to the Panel for centralized logging (app/Http/Controllers/Api/Remote/ActivityProcessingController.php:18):
+
+```json
+{
+  "data": [
+    {
+      "server": "server-uuid",
+      "user": "user-uuid",
+      "event": "server:console.command",
+      "metadata": {"command": "say Hello"},
+      "ip": "192.168.1.100",
+      "timestamp": "2026-03-04T12:00:00Z"
+    }
+  ]
+}
+```
+
+## System Requirements
+
+- **Operating System**: Linux (Ubuntu 20.04+ or Debian 10+ recommended)
+- **Docker**: Version 20.10.0 or newer
+- **Architecture**: x86_64 (AMD64) or ARM64
+- **RAM**: Minimum 1GB for Wings itself (plus server requirements)
+- **Disk Space**: SSD recommended for optimal performance
+
+## Key Features
+
+### Performance
+
+- Written in Go for high performance and low memory usage
+- Efficient Docker container management
+- Concurrent handling of multiple servers
+- Minimal overhead on host system
+
+### Security
+
+- TLS/SSL encryption for all Panel communication
+- Token-based authentication
+- Isolated containers prevent server-to-server interference
+- SFTP access control via Panel permissions
+
+### Reliability
+
+- Automatic server state recovery after Wings restart
+- Graceful handling of crashed containers
+- Health checks and monitoring
+- Comprehensive logging
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/wings/installation">
+    Install Wings on your node
+  </Card>
+  <Card title="Configuration" icon="gear" href="/wings/configuration">
+    Configure Wings settings
+  </Card>
+  <Card title="Docker Management" icon="docker" href="/wings/docker-management">
+    Learn about container management
+  </Card>
+  <Card title="Networking" icon="network-wired" href="/wings/networking">
+    Configure networking and ports
+  </Card>
+</CardGroup>

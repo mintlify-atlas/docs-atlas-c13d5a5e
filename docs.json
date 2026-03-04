@@ -1,122 +1,160 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Pterodactyl Panel",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#9a5c2b",
+    "light": "#b8aca4",
+    "dark": "#f4f1ea"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "https://media.brand.dev/c6c7bc0a-ff00-4000-8a4e-0d7a6bc9543a.jpg",
+  "logo": {
+    "light": "https://media.brand.dev/c787b4a1-341c-40d2-b139-8867c80c4c9f.png",
+    "dark": "https://media.brand.dev/c787b4a1-341c-40d2-b139-8867c80c4c9f.png"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/pterodactyl/panel"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/pterodactyl/panel"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "features",
+              "system-requirements",
+              "installation"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Panel Administration",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "admin/overview",
+              "admin/users",
+              "admin/servers",
+              "admin/nodes",
+              "admin/locations",
+              "admin/nests-eggs",
+              "admin/mounts",
+              "admin/database-hosts"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Server Management",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "servers/overview",
+              "servers/console",
+              "servers/file-manager",
+              "servers/databases",
+              "servers/schedules",
+              "servers/backups",
+              "servers/network",
+              "servers/startup-parameters",
+              "servers/settings"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "User Guide",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "user/account-settings",
+              "user/two-factor-auth",
+              "user/api-keys",
+              "user/ssh-keys",
+              "user/subusers"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "config/environment",
+              "config/email",
+              "config/database",
+              "config/cache-queue",
+              "config/security"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/docker-configuration",
+              "advanced/egg-creation",
+              "advanced/migrations",
+              "advanced/troubleshooting"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Overview",
             "pages": [
-              "api-reference/introduction"
+              "api/overview",
+              "api/authentication",
+              "api/rate-limiting",
+              "api/errors"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Application API",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/application/users",
+              "api/application/nodes",
+              "api/application/locations",
+              "api/application/servers",
+              "api/application/nests",
+              "api/application/eggs"
+            ]
+          },
+          {
+            "group": "Client API",
+            "pages": [
+              "api/client/account",
+              "api/client/servers",
+              "api/client/files",
+              "api/client/databases",
+              "api/client/schedules",
+              "api/client/backups",
+              "api/client/network",
+              "api/client/startup"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Wings",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "wings/overview",
+              "wings/installation",
+              "wings/configuration"
+            ]
+          },
+          {
+            "group": "Operations",
+            "pages": [
+              "wings/docker-management",
+              "wings/networking",
+              "wings/security",
+              "wings/monitoring"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

@@ -1,0 +1,660 @@
+---
+title: 'Security'
+description: 'Security best practices and hardening for Wings'
+---
+
+## Overview
+
+Securing your Wings installation is critical since it manages game servers with potentially sensitive data and provides access to the host system through Docker containers.
+
+## SSL/TLS Configuration
+
+### Why SSL is Required
+
+Wings communicates with the Panel over HTTPS. SSL/TLS encryption:
+
+- Protects authentication tokens in transit
+- Prevents man-in-the-middle attacks
+- Encrypts server data and console output
+- Required for production Panel deployments
+
+### SSL Certificate Setup
+
+<Steps>
+  <Step title="Install Certbot">
+    ```bash
+    # Ubuntu/Debian
+    apt install -y certbot
+    
+    # CentOS/RHEL
+    dnf install -y certbot
+    ```
+  </Step>
+  
+  <Step title="Generate certificate">
+    ```bash
+    certbot certonly --standalone -d node.example.com
+    ```
+    
+    <Note>
+    Ensure port 80 is open and not in use during certificate generation.
+    </Note>
+  </Step>
+  
+  <Step title="Configure Wings">
+    Edit `/etc/pterodactyl/config.yml`:
+    
+    ```yaml
+    api:
+      ssl:
+        enabled: true
+        cert: /etc/letsencrypt/live/node.example.com/fullchain.pem
+        key: /etc/letsencrypt/live/node.example.com/privkey.pem
+    ```
+  </Step>
+  
+  <Step title="Setup auto-renewal">
+    ```bash
+    # Test renewal
+    certbot renew --dry-run
+    
+    # Certbot automatically configures renewal cron job
+    systemctl status certbot.timer
+    ```
+  </Step>
+  
+  <Step title="Restart Wings after renewal">
+    Create renewal hook:
+    
+    ```bash
+    cat > /etc/letsencrypt/renewal-hooks/deploy/restart-wings.sh << 'EOF'
+    #!/bin/bash
+    systemctl restart wings
+    EOF
+    
+    chmod +x /etc/letsencrypt/renewal-hooks/deploy/restart-wings.sh
+    ```
+  </Step>
+</Steps>
+
+### Certificate Verification
+
+```bash
+# Check certificate validity
+openssl x509 -in /etc/letsencrypt/live/node.example.com/cert.pem -text -noout
+
+# Test SSL connection
+openssl s_client -connect node.example.com:8080 -servername node.example.com
+
+# Verify certificate chain
+curl -vI https://node.example.com:8080
+```
+
+## Authentication Security
+
+### Token Management
+
+Wings authenticates with the Panel using tokens configured in `/etc/pterodactyl/config.yml`:
+
+```yaml
+uuid: node-uuid
+token_id: token-id
+token: secret-token
+```
+
+<Warning>
+**Never** share these credentials:
+- Do not commit to version control
+- Do not share in support requests
+- Rotate immediately if compromised
+</Warning>
+
+### Token Rotation
+
+Rotate tokens if compromised:
+
+<Steps>
+  <Step title="Generate new token">
+    In Panel → Admin → Nodes → Your Node → Configuration tab, click "Regenerate Token"
+  </Step>
+  
+  <Step title="Update Wings config">
+    Copy the new configuration and update `/etc/pterodactyl/config.yml`
+  </Step>
+  
+  <Step title="Restart Wings">
+    ```bash
+    systemctl restart wings
+    ```
+  </Step>
+</Steps>
+
+### SFTP Authentication
+
+SFTP authentication flows through the Panel's `/api/remote/sftp/auth` endpoint (app/Http/Controllers/Api/Remote/SftpAuthenticationController.php:34).
+
+#### Password Authentication
+
+Wings sends credentials to the Panel for validation:
+
+```json
+{
+  "username": "john.a1b2c3d4",
+  "password": "user-password",
+  "type": "password"
+}
+```
+
+The Panel validates using `password_verify()` (app/Http/Controllers/Api/Remote/SftpAuthenticationController.php:51).
+
+#### Public Key Authentication
+
+Wings sends the SSH public key to the Panel:
+
+```json
+{
+  "username": "john.a1b2c3d4",
+  "password": "ssh-rsa AAAA...",
+  "type": "public_key"
+}
+```
+
+The Panel verifies the key fingerprint against stored SSH keys (app/Http/Controllers/Api/Remote/SftpAuthenticationController.php:64).
+
+#### Rate Limiting
+
+SFTP authentication is rate-limited to prevent brute force attacks:
+
+```php
+if ($this->hasTooManyLoginAttempts($request)) {
+    $seconds = $this->limiter()->availableIn($this->throttleKey($request));
+    throw new TooManyRequestsHttpException($seconds, ...);
+}
+```
+
+Default: 5 attempts per minute per IP/username combination.
+
+## Firewall Configuration
+
+### Minimal Firewall Rules
+
+Only expose necessary ports:
+
+```bash
+# UFW example
+ufw default deny incoming
+ufw default allow outgoing
+
+# SSH (change default port for security)
+ufw allow 2222/tcp
+
+# Wings API (from Panel IP only)
+ufw allow from PANEL_IP to any port 8080 proto tcp
+
+# SFTP
+ufw allow 2022/tcp
+
+# Game server ports
+ufw allow 25565:25665/tcp
+ufw allow 25565:25665/udp
+
+ufw enable
+```
+
+### IP Whitelisting
+
+Restrict Wings API to Panel IP only:
+
+```bash
+# UFW
+ufw allow from PANEL_IP to any port 8080 proto tcp
+
+# iptables
+iptables -A INPUT -p tcp --dport 8080 -s PANEL_IP -j ACCEPT
+iptables -A INPUT -p tcp --dport 8080 -j DROP
+```
+
+### DDoS Protection
+
+#### Connection Limits
+
+```bash
+# Limit new connections
+iptables -A INPUT -p tcp --dport 25565 -m state --state NEW -m recent --set
+iptables -A INPUT -p tcp --dport 25565 -m state --state NEW -m recent --update --seconds 60 --hitcount 10 -j DROP
+```
+
+#### SYN Flood Protection
+
+```bash
+# Enable SYN cookies
+echo "net.ipv4.tcp_syncookies=1" >> /etc/sysctl.conf
+echo "net.ipv4.tcp_max_syn_backlog=2048" >> /etc/sysctl.conf
+echo "net.ipv4.tcp_synack_retries=2" >> /etc/sysctl.conf
+sysctl -p
+```
+
+## Container Security
+
+### Container Isolation
+
+Wings isolates servers using Docker:
+
+- **Filesystem isolation**: Each container has its own filesystem
+- **Network isolation**: Containers can't directly access each other
+- **Resource limits**: CPU/memory limits prevent resource exhaustion
+- **Capability restrictions**: Containers run with minimal Linux capabilities
+
+### Security Options
+
+Wings configures containers with security options:
+
+```bash
+# Read-only root filesystem (where supported)
+--read-only
+--tmpfs /tmp
+
+# Drop all capabilities, add only necessary ones
+--cap-drop=ALL
+--cap-add=NET_BIND_SERVICE
+
+# Prevent privilege escalation
+--security-opt=no-new-privileges
+```
+
+### AppArmor/SELinux
+
+Enable mandatory access control:
+
+#### AppArmor (Ubuntu/Debian)
+
+```bash
+# Check status
+aa-status
+
+# Load Docker profile
+apparmor_parser -r /etc/apparmor.d/docker
+
+# Verify Docker uses AppArmor
+docker info | grep -i security
+```
+
+#### SELinux (CentOS/RHEL)
+
+```bash
+# Enable SELinux
+setenforce 1
+sed -i 's/SELINUX=disabled/SELINUX=enforcing/' /etc/selinux/config
+
+# Verify status
+getenforce
+sestatus
+```
+
+### User Namespaces
+
+Enable user namespace remapping for additional isolation:
+
+```bash
+# Configure Docker daemon
+cat > /etc/docker/daemon.json << EOF
+{
+  "userns-remap": "default"
+}
+EOF
+
+systemctl restart docker
+```
+
+<Warning>
+User namespaces can break some game servers. Test thoroughly before enabling in production.
+</Warning>
+
+## File System Security
+
+### Directory Permissions
+
+Secure Wings directories:
+
+```bash
+# Wings configuration
+chown -R root:root /etc/pterodactyl
+chmod 700 /etc/pterodactyl
+chmod 600 /etc/pterodactyl/config.yml
+
+# Wings data directory
+chown -R root:root /var/lib/pterodactyl
+chmod 755 /var/lib/pterodactyl
+
+# Server volumes (Wings manages these)
+chmod 755 /var/lib/pterodactyl/volumes
+```
+
+### Sensitive File Protection
+
+```bash
+# Protect SSL private keys
+chmod 600 /etc/letsencrypt/live/*/privkey.pem
+
+# Protect Wings config
+chmod 600 /etc/pterodactyl/config.yml
+```
+
+### Mount Security
+
+Carefully control allowed mounts in `/etc/pterodactyl/config.yml`:
+
+```yaml
+allowed_mounts:
+  # Only allow specific, read-only directories
+  - /opt/shared-configs
+```
+
+<Warning>
+Never allow mounts to:
+- `/etc` - System configuration
+- `/root` - Root home directory
+- `/var/lib/pterodactyl` - Wings data
+- `/home` - User directories
+</Warning>
+
+## Network Security
+
+### CORS Protection
+
+Restrict WebSocket origins:
+
+```yaml /etc/pterodactyl/config.yml
+allowed_origins:
+  - https://panel.example.com
+```
+
+This prevents unauthorized websites from connecting to server consoles.
+
+### API Access Control
+
+The Wings API should only be accessible to:
+
+1. The Panel (via authentication token)
+2. Monitoring systems (if needed)
+
+```bash
+# Block public access
+ufw deny 8080/tcp
+
+# Allow only Panel
+ufw allow from PANEL_IP to any port 8080 proto tcp
+```
+
+## System Hardening
+
+### SSH Security
+
+```bash
+# Edit SSH config
+nano /etc/ssh/sshd_config
+```
+
+Recommended settings:
+
+```
+Port 2222                          # Non-standard port
+PermitRootLogin no                 # Disable root login
+PasswordAuthentication no          # Key-only auth
+PubkeyAuthentication yes
+X11Forwarding no
+MaxAuthTries 3
+ClientAliveInterval 300
+ClientAliveCountMax 2
+```
+
+Restart SSH:
+
+```bash
+systemctl restart sshd
+```
+
+### Automatic Updates
+
+Keep system packages updated:
+
+#### Ubuntu/Debian
+
+```bash
+# Install unattended upgrades
+apt install unattended-upgrades
+
+# Configure
+dpkg-reconfigure -plow unattended-upgrades
+
+# Enable auto-reboot if needed
+echo 'Unattended-Upgrade::Automatic-Reboot "true";' >> /etc/apt/apt.conf.d/50unattended-upgrades
+```
+
+#### CentOS/RHEL
+
+```bash
+# Install automatic updates
+dnf install dnf-automatic
+
+# Enable
+systemctl enable --now dnf-automatic.timer
+```
+
+### Kernel Hardening
+
+```bash
+# Add to /etc/sysctl.conf
+cat >> /etc/sysctl.conf << EOF
+# IP Spoofing protection
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.conf.default.rp_filter = 1
+
+# Ignore ICMP redirects
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv6.conf.all.accept_redirects = 0
+
+# Ignore send redirects
+net.ipv4.conf.all.send_redirects = 0
+
+# Disable source packet routing
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv6.conf.all.accept_source_route = 0
+
+# Log Martians
+net.ipv4.conf.all.log_martians = 1
+
+# Ignore ICMP ping requests
+net.ipv4.icmp_echo_ignore_all = 0
+
+# Ignore Broadcast Request
+net.ipv4.icmp_echo_ignore_broadcasts = 1
+
+# Syn flood protection
+net.ipv4.tcp_syncookies = 1
+net.ipv4.tcp_max_syn_backlog = 2048
+net.ipv4.tcp_synack_retries = 2
+net.ipv4.tcp_syn_retries = 5
+EOF
+
+sysctl -p
+```
+
+## Monitoring and Auditing
+
+### Audit Wings Access
+
+Monitor Wings logs for suspicious activity:
+
+```bash
+# Monitor Wings logs
+journalctl -u wings -f
+
+# Search for authentication failures
+journalctl -u wings | grep -i "auth.*fail"
+
+# Search for SFTP access
+journalctl -u wings | grep -i sftp
+```
+
+### Activity Logging
+
+Wings reports server activity to the Panel via `/api/remote/activity` (app/Http/Controllers/Api/Remote/ActivityProcessingController.php:18).
+
+Monitor activity logs in the Panel:
+- Admin → Activity Logs
+- Filter by server, user, or event type
+
+### Fail2Ban Integration
+
+Protect against brute force attacks:
+
+```bash
+# Install fail2ban
+apt install fail2ban
+
+# Create Wings filter
+cat > /etc/fail2ban/filter.d/wings.conf << EOF
+[Definition]
+failregex = failed to authenticate user.*from <HOST>
+ignoreregex =
+EOF
+
+# Create jail
+cat > /etc/fail2ban/jail.d/wings.conf << EOF
+[wings-sftp]
+enabled = true
+port = 2022
+filter = wings
+logpath = /var/log/syslog
+maxretry = 5
+bantime = 3600
+EOF
+
+systemctl restart fail2ban
+```
+
+## Backup Security
+
+### Secure Backup Storage
+
+Wings can store backups locally or remotely:
+
+```yaml
+# Use encrypted remote storage
+# Configure in Panel → Locations → Backup Storage
+```
+
+Recommendations:
+- Use S3-compatible storage with encryption
+- Enable versioning for backup recovery
+- Use separate credentials for backup storage
+- Regularly test backup restoration
+
+### Backup Encryption
+
+Backups should be encrypted at rest:
+
+1. Use encrypted storage backends (S3 with SSE)
+2. Enable filesystem encryption on backup volumes
+3. Use encrypted network transfer (HTTPS/SFTP)
+
+## Incident Response
+
+### Compromised Node
+
+If you suspect a node is compromised:
+
+<Steps>
+  <Step title="Isolate the node">
+    ```bash
+    # Block all incoming traffic except SSH
+    ufw default deny incoming
+    ufw allow from YOUR_IP to any port 2222
+    ```
+  </Step>
+  
+  <Step title="Stop all servers">
+    ```bash
+    # Stop Wings (stops all containers)
+    systemctl stop wings
+    
+    # Verify all containers stopped
+    docker ps -a
+    ```
+  </Step>
+  
+  <Step title="Rotate credentials">
+    - Regenerate node token in Panel
+    - Change SSH keys
+    - Rotate SSL certificates
+  </Step>
+  
+  <Step title="Audit system">
+    ```bash
+    # Check for rootkits
+apt install rkhunter
+    rkhunter --check
+    
+    # Check system integrity
+    aide --check
+    
+    # Review logs
+    journalctl --since "1 day ago" | grep -i "error\|fail\|attack"
+    ```
+  </Step>
+  
+  <Step title="Consider reimaging">
+    If compromise is confirmed, reinstall the system from scratch.
+  </Step>
+</Steps>
+
+### Compromised Server Container
+
+If a game server is compromised:
+
+1. **Suspend the server** in the Panel
+2. **Backup evidence**: `docker export ptdl-{uuid} > compromised.tar`
+3. **Delete the server** to remove the container
+4. **Notify the server owner**
+5. **Review logs** for how the compromise occurred
+
+## Security Checklist
+
+Use this checklist to verify your Wings installation:
+
+- [ ] SSL/TLS enabled with valid certificate
+- [ ] Auto-renewal configured for SSL certificates
+- [ ] Firewall configured with minimal port exposure
+- [ ] Wings API restricted to Panel IP only
+- [ ] SSH configured with key-only authentication
+- [ ] SSH running on non-standard port
+- [ ] Root login disabled via SSH
+- [ ] Automatic security updates enabled
+- [ ] Kernel hardening parameters applied
+- [ ] CORS origins restricted
+- [ ] Allowed mounts carefully limited
+- [ ] Docker AppArmor/SELinux enabled
+- [ ] File permissions properly secured
+- [ ] Fail2ban configured for SFTP
+- [ ] Regular backup testing performed
+- [ ] Activity logs monitored regularly
+- [ ] Node token kept secret
+- [ ] No unnecessary services running
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Monitoring" icon="chart-line" href="/wings/monitoring">
+    Set up monitoring and alerting
+  </Card>
+  <Card title="Configuration" icon="gear" href="/wings/configuration">
+    Review configuration options
+  </Card>
+  <Card title="Networking" icon="network-wired" href="/wings/networking">
+    Secure network configuration
+  </Card>
+  <Card title="Docker Management" icon="docker" href="/wings/docker-management">
+    Container security settings
+  </Card>
+</CardGroup>

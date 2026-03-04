@@ -1,0 +1,298 @@
+---
+title: 'Rate Limiting'
+description: 'Understanding API rate limits in Pterodactyl Panel'
+---
+
+Pterodactyl implements rate limiting to protect the Panel from abuse and ensure fair resource usage. Different endpoints have different rate limits.
+
+## API Rate Limits
+
+### Client API
+
+The Client API has a default rate limit of **256 requests per minute** per user or IP address.
+
+**Configuration**:
+
+Set via environment variable:
+```bash
+APP_API_CLIENT_RATELIMIT=256
+```
+
+Or in `config/http.php`:
+```php
+'rate_limit' => [
+    'client_period' => 1,  // Minutes
+    'client' => env('APP_API_CLIENT_RATELIMIT', 256),
+],
+```
+
+### Application API
+
+The Application API has a default rate limit of **256 requests per minute** per API key or IP address.
+
+**Configuration**:
+
+Set via environment variable:
+```bash
+APP_API_APPLICATION_RATELIMIT=256
+```
+
+Or in `config/http.php`:
+```php
+'rate_limit' => [
+    'application_period' => 1,  // Minutes
+    'application' => env('APP_API_APPLICATION_RATELIMIT', 256),
+],
+```
+
+## Authentication Endpoints
+
+Authentication endpoints have stricter rate limits to prevent brute force attacks:
+
+### Login & Two-Factor
+
+- **10 requests per minute** for login and checkpoint endpoints
+- Applied to the client IP address
+
+### Password Reset
+
+- **2 requests per minute** for password reset requests
+- Prevents email spam and abuse
+
+## Resource-Specific Throttling
+
+Certain resource-intensive operations have additional throttling beyond the standard API limits:
+
+### Backup Creation
+
+Backups are throttled to prevent excessive resource usage:
+
+**Default Configuration**:
+```php
+'throttles' => [
+    'period' => 600,  // 10 minutes in seconds
+    'limit' => 2,     // Max 2 backups per period
+],
+```
+
+This means users can create a maximum of **2 backups within a 10-minute period**.
+
+**Disable Throttling**:
+```php
+'period' => 0,  // Set to 0 to disable
+```
+
+### Server Resources
+
+Individual server operations are throttled to prevent rapid-fire actions:
+
+- **Databases**: Rate limited per server
+- **Backups**: Rate limited per server
+- **File Pull**: Rate limited per server
+- **Allocations**: Rate limited per server
+- **Schedules**: Rate limited per server
+- **Subusers**: Rate limited per server
+- **Websocket**: Rate limited per server
+
+These are applied using Laravel's rate limiting with dynamic keys based on the server identifier.
+
+## Rate Limit Tracking
+
+Rate limits are tracked by:
+
+1. **Authenticated Users**: Tracked by user UUID
+2. **Unauthenticated Requests**: Tracked by IP address
+
+**Key Format** (from `app/Providers/RouteServiceProvider.php`):
+```php
+// Client API
+$key = optional($request->user())->uuid ?: $request->ip();
+
+// Application API  
+$key = optional($request->user())->uuid ?: $request->ip();
+```
+
+This means switching IP addresses will not bypass rate limits for authenticated users.
+
+## Rate Limit Headers
+
+API responses include rate limit information in the headers:
+
+```http
+X-RateLimit-Limit: 256
+X-RateLimit-Remaining: 243
+Retry-After: 42
+```
+
+- `X-RateLimit-Limit`: Maximum requests allowed in the time window
+- `X-RateLimit-Remaining`: Requests remaining in current window
+- `Retry-After`: Seconds until the rate limit resets (only when limit exceeded)
+
+## Rate Limit Response
+
+When you exceed the rate limit, you'll receive a `429 Too Many Requests` response:
+
+```json
+{
+  "errors": [
+    {
+      "code": "TooManyRequestsHttpException",
+      "status": "429",
+      "detail": "Too many requests"
+    }
+  ]
+}
+```
+
+**Response Headers**:
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 42
+X-RateLimit-Limit: 256
+X-RateLimit-Remaining: 0
+```
+
+## SFTP Authentication
+
+SFTP authentication has its own throttling mechanism to prevent brute force attacks:
+
+- Failed authentication attempts are tracked per server
+- Throttle key: `sftp.{server_id}:{request_ip}`
+- When throttled, returns seconds until available
+
+**Example Response**:
+```bash
+Too many login attempts for this account, please try again in 42 seconds.
+```
+
+## Best Practices
+
+### 1. Implement Retry Logic
+
+```python
+import time
+import requests
+
+def make_request_with_retry(url, headers, max_retries=3):
+    for attempt in range(max_retries):
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code == 429:
+            retry_after = int(response.headers.get('Retry-After', 60))
+            print(f"Rate limited. Waiting {retry_after} seconds...")
+            time.sleep(retry_after)
+            continue
+            
+        return response
+    
+    raise Exception("Max retries exceeded")
+```
+
+### 2. Monitor Rate Limit Headers
+
+```javascript
+const response = await fetch(url, {
+  headers: {
+    'Authorization': `Bearer ${apiKey}`,
+    'Accept': 'application/json'
+  }
+});
+
+const remaining = response.headers.get('X-RateLimit-Remaining');
+if (remaining < 10) {
+  console.warn(`Only ${remaining} requests remaining!`);
+}
+```
+
+### 3. Batch Requests
+
+When possible, use endpoints that support includes to reduce the number of requests:
+
+```bash
+# Instead of multiple requests
+curl /api/application/servers/1
+curl /api/application/servers/1/databases
+curl /api/application/servers/1/allocations
+
+# Use includes
+curl '/api/application/servers/1?include=databases,allocations'
+```
+
+### 4. Cache Responses
+
+Cache API responses when the data doesn't change frequently:
+
+```python
+import time
+
+class APICache:
+    def __init__(self, ttl=300):
+        self.cache = {}
+        self.ttl = ttl
+    
+    def get(self, key):
+        if key in self.cache:
+            data, timestamp = self.cache[key]
+            if time.time() - timestamp < self.ttl:
+                return data
+        return None
+    
+    def set(self, key, data):
+        self.cache[key] = (data, time.time())
+```
+
+### 5. Use Pagination Wisely
+
+Don't request all resources at once. Use pagination:
+
+```bash
+# Request reasonable page sizes
+curl '/api/application/servers?per_page=50&page=1'
+```
+
+## Adjusting Rate Limits
+
+For high-traffic installations, you can increase rate limits:
+
+**Environment Variables**:
+```env
+APP_API_CLIENT_RATELIMIT=512
+APP_API_APPLICATION_RATELIMIT=512
+```
+
+**Backup Throttles** (`config/backups.php`):
+```php
+'throttles' => [
+    'period' => 1200,  // 20 minutes
+    'limit' => 5,      // 5 backups per period
+],
+```
+
+<Warning>
+  Increasing rate limits too high may expose your Panel to abuse or performance issues.
+</Warning>
+
+## Historical Context
+
+**Version 1.12.1 (March 2026)**:
+- Default Client API rate limit increased from 128 to 256 requests per minute
+- Change made to reduce "Too Many Requests" errors for legitimate users
+
+**Version 1.0.1**:
+- Client API rate limit increased from 240 to 720 requests per minute (later adjusted)
+
+## Troubleshooting
+
+### Consistently Hitting Rate Limits
+
+1. **Review your code** for unnecessary API calls
+2. **Implement caching** for frequently accessed data
+3. **Use includes** to fetch related resources in single requests
+4. **Consider increasing limits** if running a high-traffic installation
+
+### Rate Limits Not Working
+
+1. Verify cache driver is properly configured (Redis recommended)
+2. Check that environment variables are set correctly
+3. Clear configuration cache: `php artisan config:clear`
+4. Verify rate limiter middleware is applied to routes

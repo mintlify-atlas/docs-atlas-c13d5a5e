@@ -1,0 +1,439 @@
+---
+title: 'Docker Configuration'
+description: 'Configuring Docker for Pterodactyl Panel'
+---
+
+Pterodactyl Panel can be deployed using Docker for simplified installation and management. This guide covers Docker configuration for the Panel.
+
+## Official Docker Image
+
+Pterodactyl provides an official Docker image hosted on GitHub Container Registry:
+
+```bash
+ghcr.io/pterodactyl/panel:latest
+```
+
+**Image Details**:
+- Based on PHP 8.3 FPM Alpine
+- Includes Nginx web server
+- Node.js 22 for asset compilation
+- Built-in cron and supervisor
+- Multi-architecture support (AMD64, ARM)
+
+## Docker Compose Setup
+
+### Basic Configuration
+
+Create a `docker-compose.yml` file:
+
+```yaml
+version: '3.8'
+
+x-common:
+  database:
+    &db-environment
+    MYSQL_PASSWORD: &db-password "CHANGE_ME"
+    MYSQL_ROOT_PASSWORD: "CHANGE_ME_TOO"
+  panel:
+    &panel-environment
+    APP_URL: "http://example.com"
+    APP_TIMEZONE: "UTC"
+    APP_SERVICE_AUTHOR: "noreply@example.com"
+  mail:
+    &mail-environment
+    MAIL_FROM: "noreply@example.com"
+    MAIL_DRIVER: "smtp"
+    MAIL_HOST: "mail"
+    MAIL_PORT: "1025"
+    MAIL_USERNAME: ""
+    MAIL_PASSWORD: ""
+    MAIL_ENCRYPTION: "true"
+
+services:
+  database:
+    image: mariadb:10.5
+    restart: always
+    command: --default-authentication-plugin=mysql_native_password
+    volumes:
+      - "/srv/pterodactyl/database:/var/lib/mysql"
+    environment:
+      <<: *db-environment
+      MYSQL_DATABASE: "panel"
+      MYSQL_USER: "pterodactyl"
+
+  cache:
+    image: redis:alpine
+    restart: always
+
+  panel:
+    image: ghcr.io/pterodactyl/panel:latest
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    links:
+      - database
+      - cache
+    volumes:
+      - "/srv/pterodactyl/var/:/app/var/"
+      - "/srv/pterodactyl/nginx/:/etc/nginx/http.d/"
+      - "/srv/pterodactyl/certs/:/etc/letsencrypt/"
+      - "/srv/pterodactyl/logs/:/app/storage/logs"
+    environment:
+      <<: [*panel-environment, *mail-environment]
+      DB_PASSWORD: *db-password
+      APP_ENV: "production"
+      APP_ENVIRONMENT_ONLY: "false"
+      CACHE_DRIVER: "redis"
+      SESSION_DRIVER: "redis"
+      QUEUE_DRIVER: "redis"
+      REDIS_HOST: "cache"
+      DB_HOST: "database"
+      DB_PORT: "3306"
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+```
+
+### Environment Variables
+
+#### Application Settings
+
+```yaml
+APP_URL: "https://panel.example.com"
+APP_TIMEZONE: "America/New_York"
+APP_ENV: "production"
+APP_DEBUG: "false"
+APP_LOCALE: "en"
+APP_SERVICE_AUTHOR: "noreply@example.com"
+```
+
+#### Database Configuration
+
+```yaml
+DB_HOST: "database"
+DB_PORT: "3306"
+DB_DATABASE: "panel"
+DB_USERNAME: "pterodactyl"
+DB_PASSWORD: "secure_password"
+```
+
+**MariaDB SSL/TLS** (optional):
+```yaml
+DB_SSL: "true"
+DB_SSL_CA: "/path/to/ca.pem"
+DB_SSL_CERT: "/path/to/cert.pem"
+DB_SSL_KEY: "/path/to/key.pem"
+```
+
+#### Cache Configuration
+
+```yaml
+CACHE_DRIVER: "redis"
+SESSION_DRIVER: "redis"
+QUEUE_DRIVER: "redis"
+REDIS_HOST: "cache"
+REDIS_PORT: "6379"
+REDIS_PASSWORD: "null"
+```
+
+**Redis SSL/TLS** (optional):
+```yaml
+REDIS_SCHEME: "tls"
+REDIS_SSL_CA: "/path/to/ca.pem"
+```
+
+#### Mail Configuration
+
+```yaml
+MAIL_DRIVER: "smtp"
+MAIL_HOST: "smtp.example.com"
+MAIL_PORT: "587"
+MAIL_FROM: "noreply@example.com"
+MAIL_USERNAME: "apikey"
+MAIL_PASSWORD: "SG.your-sendgrid-key"
+MAIL_ENCRYPTION: "tls"
+```
+
+## Dockerfile Structure
+
+The official Pterodactyl Dockerfile uses a multi-stage build:
+
+### Stage 0: Asset Compilation
+
+```dockerfile
+FROM --platform=$TARGETOS/$TARGETARCH node:22-alpine
+WORKDIR /app
+COPY . ./
+RUN yarn install --frozen-lockfile \
+    && yarn run build:production
+```
+
+This stage:
+- Uses Node.js 22 to compile frontend assets
+- Runs `yarn install` to get dependencies
+- Builds production assets with `yarn run build:production`
+
+### Stage 1: Application Container
+
+```dockerfile
+FROM --platform=$TARGETOS/$TARGETARCH php:8.3-fpm-alpine
+WORKDIR /app
+COPY . ./
+COPY --from=0 /app/public/assets ./public/assets
+
+RUN apk add --no-cache --update \
+    ca-certificates dcron curl git supervisor tar unzip nginx \
+    libpng-dev libxml2-dev libzip-dev \
+    certbot certbot-nginx
+```
+
+This stage:
+- Uses PHP 8.3 FPM on Alpine Linux
+- Copies compiled assets from Stage 0
+- Installs required system packages
+- Includes certbot for Let's Encrypt SSL
+
+### PHP Extensions
+
+```dockerfile
+RUN docker-php-ext-configure zip \
+    && docker-php-ext-install bcmath gd pdo_mysql zip
+```
+
+Installed extensions:
+- `bcmath` - Arbitrary precision mathematics
+- `gd` - Image processing
+- `pdo_mysql` - MySQL database driver
+- `zip` - Archive handling
+
+### Application Setup
+
+```dockerfile
+RUN curl -sS https://getcomposer.org/installer | php -- \
+      --install-dir=/usr/local/bin --filename=composer \
+    && cp .env.example .env \
+    && mkdir -p bootstrap/cache/ storage/logs \
+                 storage/framework/sessions \
+                 storage/framework/views \
+                 storage/framework/cache \
+    && chmod 777 -R bootstrap storage \
+    && composer install --no-dev --optimize-autoloader \
+    && chown -R nginx:nginx .
+```
+
+## Volume Mounts
+
+### Persistent Data
+
+Mount these directories to persist data across container restarts:
+
+```yaml
+volumes:
+  # Application data and uploaded files
+  - "/srv/pterodactyl/var/:/app/var/"
+  
+  # Nginx configuration
+  - "/srv/pterodactyl/nginx/:/etc/nginx/http.d/"
+  
+  # SSL certificates
+  - "/srv/pterodactyl/certs/:/etc/letsencrypt/"
+  
+  # Application logs
+  - "/srv/pterodactyl/logs/:/app/storage/logs"
+```
+
+### Directory Permissions
+
+Ensure proper permissions on mounted directories:
+
+```bash
+sudo mkdir -p /srv/pterodactyl/{var,nginx,certs,logs}
+sudo chown -R 82:82 /srv/pterodactyl  # nginx user UID in Alpine
+```
+
+## SSL/TLS Configuration
+
+### Let's Encrypt (Automatic)
+
+Set the `LE_EMAIL` environment variable:
+
+```yaml
+environment:
+  LE_EMAIL: "admin@example.com"
+  APP_URL: "https://panel.example.com"
+```
+
+The container will automatically:
+1. Request a certificate from Let's Encrypt
+2. Configure Nginx to use HTTPS
+3. Set up auto-renewal via cron (runs at 11 PM daily)
+
+### Custom Certificates
+
+Mount your certificates to `/etc/letsencrypt/`:
+
+```yaml
+volumes:
+  - "/path/to/certs/:/etc/letsencrypt/live/panel.example.com/"
+```
+
+Certificate files needed:
+- `fullchain.pem` - Certificate chain
+- `privkey.pem` - Private key
+
+## Networking
+
+### Port Exposure
+
+```yaml
+ports:
+  - "80:80"    # HTTP
+  - "443:443"  # HTTPS
+```
+
+### Custom Network
+
+```yaml
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+```
+
+### Reverse Proxy
+
+When using a reverse proxy (Nginx, Traefik, Caddy):
+
+1. Don't expose ports 80/443
+2. Set `APP_URL` to your domain
+3. Configure proxy to pass headers:
+
+```nginx
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+## Cron Jobs
+
+The container automatically sets up cron jobs:
+
+```bash
+# Laravel scheduler (every minute)
+* * * * * /usr/local/bin/php /app/artisan schedule:run
+
+# Let's Encrypt renewal (daily at 11 PM)
+0 23 * * * certbot renew --nginx --quiet
+```
+
+## Supervisor Configuration
+
+The container uses Supervisor to manage processes:
+
+```ini
+[supervisord]
+nodaemon=true
+
+[program:php-fpm]
+command=php-fpm
+
+[program:nginx]
+command=nginx -g "daemon off;"
+
+[program:cron]
+command=crond -f
+```
+
+## Starting the Stack
+
+```bash
+# Start containers
+docker-compose up -d
+
+# View logs
+docker-compose logs -f panel
+
+# Access container shell
+docker-compose exec panel sh
+```
+
+## Initial Setup
+
+After starting the containers, run the setup:
+
+```bash
+# Generate application key
+docker-compose exec panel php artisan key:generate --force
+
+# Run migrations
+docker-compose exec panel php artisan migrate --force --seed
+
+# Create admin user
+docker-compose exec panel php artisan p:user:make
+```
+
+## Maintenance Commands
+
+### Clear Cache
+
+```bash
+docker-compose exec panel php artisan config:clear
+docker-compose exec panel php artisan cache:clear
+docker-compose exec panel php artisan view:clear
+```
+
+### Update Panel
+
+```bash
+# Pull latest image
+docker-compose pull panel
+
+# Restart container
+docker-compose up -d panel
+
+# Run migrations
+docker-compose exec panel php artisan migrate --force
+```
+
+## Troubleshooting
+
+### Container Won't Start
+
+Check logs:
+```bash
+docker-compose logs panel
+```
+
+Common issues:
+- Database not ready (wait a few seconds)
+- Permission errors on volumes
+- Port conflicts
+
+### Database Connection Failed
+
+Verify:
+- Database container is running
+- Credentials match in both services
+- Database has been created
+
+### Permission Errors
+
+```bash
+sudo chown -R 82:82 /srv/pterodactyl
+```
+
+## Best Practices
+
+1. **Use environment files** for sensitive data
+2. **Enable HTTPS** for production
+3. **Regular backups** of mounted volumes
+4. **Monitor logs** for errors
+5. **Keep images updated** for security
+6. **Use Redis** for cache and sessions
+7. **Configure proper memory limits** for PHP-FPM

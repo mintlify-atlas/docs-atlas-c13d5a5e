@@ -1,0 +1,206 @@
+---
+title: Server Overview
+description: Introduction to server management dashboard and core features
+---
+
+The server management dashboard is your central hub for controlling and monitoring your game server. It provides real-time statistics, console access, and quick actions to manage your server effectively.
+
+## Server Dashboard
+
+When you access a server, you'll see the main dashboard which includes:
+
+- **Server Console** - Real-time console output and command input
+- **Power Controls** - Start, stop, restart, and kill buttons
+- **Resource Statistics** - CPU, memory, disk, and network usage graphs
+- **Server Details** - Quick overview of server status and allocations
+
+### Server States
+
+Servers can be in various states that affect available actions:
+
+| State | Description | Actions Available |
+|-------|-------------|-------------------|
+| `running` | Server is online and operational | Full access |
+| `offline` | Server is stopped | Start only |
+| `starting` | Server is booting up | Limited |
+| `stopping` | Server is shutting down | Limited |
+| `installing` | Initial installation in progress | None |
+| `suspended` | Server has been suspended | None |
+| `restoring_backup` | Backup restoration in progress | None |
+
+<Note>
+When a server is `installing`, `suspended`, or under node maintenance, most actions will be unavailable.
+</Note>
+
+## Server Information
+
+The server overview displays key information:
+
+```json Server Object
+{
+  "uuid": "7e8e8f18-25fa-4f9e-a13d-4d1c8e8b8f9e",
+  "name": "My Minecraft Server",
+  "description": "A survival server for friends",
+  "status": null,
+  "node": "Node 01",
+  "limits": {
+    "memory": 4096,
+    "disk": 10240,
+    "cpu": 200,
+    "swap": 512,
+    "io": 500
+  },
+  "feature_limits": {
+    "databases": 2,
+    "allocations": 5,
+    "backups": 3
+  }
+}
+```
+
+## Resource Utilization
+
+The dashboard displays real-time resource usage through the Wings daemon:
+
+<Steps>
+  <Step title="CPU Usage">
+    Shows current CPU percentage and historical data. The limit is based on your allocated CPU cores (e.g., 200% = 2 cores).
+  </Step>
+  
+  <Step title="Memory Usage">
+    Displays RAM consumption in MB/GB with a graph showing trends over time.
+  </Step>
+  
+  <Step title="Disk Usage">
+    Shows total disk space used by server files, including backups stored locally.
+  </Step>
+  
+  <Step title="Network I/O">
+    Real-time network traffic in/out measured in KB/s or MB/s.
+  </Step>
+</Steps>
+
+### API Endpoint
+
+Resource statistics are fetched via WebSocket connection:
+
+```bash
+GET /api/client/servers/{server}/websocket
+```
+
+```json Response
+{
+  "object": "websocket_credentials",
+  "attributes": {
+    "token": "eyJ0eXAiOiJKV1QiLCJhbGc...",
+    "socket": "wss://node.example.com:8080/api/servers/{uuid}/ws"
+  }
+}
+```
+
+## Server Permissions
+
+Users and subusers can have different permissions:
+
+- **Server Owner** - Full access to all features
+- **Subusers** - Custom permissions set by owner
+
+### Common Permissions
+
+- `control.console` - Access console and send commands
+- `control.start`, `control.stop`, `control.restart` - Power actions
+- `file.*` - File management permissions
+- `database.*` - Database management
+- `schedule.*` - Task scheduling
+- `backup.*` - Backup operations
+- `allocation.*` - Network allocation management
+- `startup.*` - Startup parameter modification
+- `settings.*` - Server settings changes
+
+<Note>
+Permissions are checked both in the panel UI and at the API level. The server owner always has all permissions.
+</Note>
+
+## Activity Logging
+
+All server actions are logged to the activity log, which can be viewed from the dashboard:
+
+```bash
+GET /api/client/servers/{server}/activity
+```
+
+Activities include:
+- Power state changes
+- File operations (create, edit, delete)
+- Database modifications
+- Backup creation/restoration
+- Schedule execution
+- Settings changes
+
+Each log entry includes:
+- Timestamp
+- User who performed the action
+- Action type (e.g., `server:console.command`)
+- Additional properties/metadata
+
+## Installation Status
+
+During initial server creation or reinstallation, you'll see installation progress:
+
+<CodeGroup>
+```bash Check Installation Status
+GET /api/client/servers/{server}
+```
+
+```json Installing Server
+{
+  "attributes": {
+    "status": "installing",
+    "is_installing": true,
+    "installed_at": null
+  }
+}
+```
+
+```json Installed Server
+{
+  "attributes": {
+    "status": null,
+    "is_installing": false,
+    "installed_at": "2025-01-15T10:30:00+00:00"
+  }
+}
+```
+</CodeGroup>
+
+<Warning>
+Servers cannot be used until `installed_at` is set and `status` is not `installing` or `install_failed`.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Console" icon="terminal" href="/servers/console">
+    Send commands and view live output
+  </Card>
+  
+  <Card title="File Manager" icon="folder" href="/servers/file-manager">
+    Manage server files and configurations
+  </Card>
+  
+  <Card title="Databases" icon="database" href="/servers/databases">
+    Create and manage MySQL databases
+  </Card>
+  
+  <Card title="Schedules" icon="clock" href="/servers/schedules">
+    Automate tasks with cron schedules
+  </Card>
+  
+  <Card title="Backups" icon="floppy-disk" href="/servers/backups">
+    Backup and restore your server
+  </Card>
+  
+  <Card title="Network" icon="network-wired" href="/servers/network">
+    Manage port allocations
+  </Card>
+</CardGroup>
